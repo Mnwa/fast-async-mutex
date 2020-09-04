@@ -6,6 +6,7 @@
 The fast async mutex which uses atomics with spinlock algorithm. 
 Spinlock algorithm integrated with the Rust futures concept without the overhead of any libs. Also when the `MutexGuard` is dropped,
 a waker of the next locker will be executed.
+It will be works with any async runtime in Rust, it may be a Tokio, Smoll, Async-std etc..
 
 
 ## Examples
@@ -13,9 +14,12 @@ a waker of the next locker will be executed.
 ```rust
 use fast_async_mutex::mutex::Mutex;
 
-let mutex = Mutex::new(10);
-let guard = mutex.lock().await;
-assert_eq!(*guard, 10);
+#[tokio::main]
+async fn main() {
+    let mutex = Mutex::new(10);
+    let guard = mutex.lock().await;
+    assert_eq!(*guard, 10);
+}
 ```
 
 ## License
