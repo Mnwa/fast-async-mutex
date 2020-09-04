@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
+/// An async mutex.
 pub struct Mutex<T: ?Sized> {
     state: AtomicUsize,
     current: AtomicUsize,
@@ -26,6 +27,19 @@ impl<T> Mutex<T> {
         }
     }
 
+    /// Acquires the mutex.
+    ///
+    /// Returns a guard that releases the mutex and wake the next locker when dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fast_async_mutex::mutex::Mutex;
+    ///
+    /// let mutex = Mutex::new(10);
+    /// let guard = mutex.lock().await;
+    /// assert_eq!(*guard, 10);
+    /// ```
     #[inline]
     pub fn lock(&self) -> MutexGuardFuture<T> {
         MutexGuardFuture {
@@ -35,6 +49,21 @@ impl<T> Mutex<T> {
         }
     }
 
+    /// Acquires the mutex.
+    ///
+    /// Returns a guard that releases the mutex and wake the next locker when dropped.
+    /// `MutexOwnedGuard` have a `'static` lifetime, but requires the `Arc<Mutex<T>>` type
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fast_async_mutex::mutex::Mutex;
+    /// use std::sync::Arc;
+    ///
+    /// let mutex = Arc::new(Mutex::new(10));
+    /// let guard = mutex.lock_owned().await;
+    /// assert_eq!(*guard, 10);
+    /// ```
     #[inline]
     pub fn lock_owned(self: &Arc<Self>) -> MutexOwnedGuardFuture<T> {
         MutexOwnedGuardFuture {
@@ -45,6 +74,9 @@ impl<T> Mutex<T> {
     }
 }
 
+/// The Simple Mutex Guard
+/// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally borrows the Mutex, so the mutex will not be dropped while a guard exists.
+/// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
 pub struct MutexGuard<'a, T: ?Sized> {
     mutex: &'a Mutex<T>,
 }
@@ -55,6 +87,10 @@ pub struct MutexGuardFuture<'a, T: ?Sized> {
     is_realized: AtomicBool,
 }
 
+/// An owned handle to a held Mutex.
+/// This guard is only available from a Mutex that is wrapped in an `Arc`. It is identical to `MutexGuard`, except that rather than borrowing the `Mutex`, it clones the `Arc`, incrementing the reference count. This means that unlike `MutexGuard`, it will have the `'static` lifetime.
+/// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `Mutex`, so even if the lock goes away, the guard remains valid.
+/// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
 pub struct MutexOwnedGuard<T: ?Sized> {
     mutex: Arc<Mutex<T>>,
 }

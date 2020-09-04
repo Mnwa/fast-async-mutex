@@ -1,9 +1,2 @@
+/// The fast async mutex which uses spinlock algorithm with using waker
 pub mod mutex;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
