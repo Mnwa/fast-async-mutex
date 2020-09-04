@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 /// An async mutex.
-/// It will be works with any async runtime in Rust, it may be a Tokio, Smoll, Async-std etc..
+/// It will be works with any async runtime in `Rust`, it may be a `Tokio`, `Smoll`, `async-std` and etc..
 pub struct Mutex<T: ?Sized> {
     state: AtomicUsize,
     current: AtomicUsize,
