@@ -81,8 +81,10 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
             Poll::Ready(MutexGuard { mutex: self.mutex })
         } else {
             if Some(current) == self.id.checked_sub(1) {
-                self.mutex.waker.swap(
+                let _ = self.mutex.waker.compare_exchange_weak(
+                    null_mut(),
                     Box::into_raw(Box::new(cx.waker().clone())),
+                    Ordering::SeqCst,
                     Ordering::SeqCst,
                 );
             }
@@ -103,8 +105,10 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
             })
         } else {
             if Some(current) == self.id.checked_sub(1) {
-                self.mutex.waker.swap(
+                let _ = self.mutex.waker.compare_exchange_weak(
+                    null_mut(),
                     Box::into_raw(Box::new(cx.waker().clone())),
+                    Ordering::SeqCst,
                     Ordering::SeqCst,
                 );
             }
@@ -146,9 +150,9 @@ impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         self.mutex.current.fetch_add(1, Ordering::SeqCst);
 
-        unsafe {
-            let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::SeqCst);
-            if !waker_ptr.is_null() {
+        let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::SeqCst);
+        if !waker_ptr.is_null() {
+            unsafe {
                 let waker = waker_ptr.read();
                 waker.wake_by_ref();
                 waker_ptr.drop_in_place()
@@ -161,9 +165,9 @@ impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
     fn drop(&mut self) {
         self.mutex.current.fetch_add(1, Ordering::SeqCst);
 
-        unsafe {
-            let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::SeqCst);
-            if !waker_ptr.is_null() {
+        let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::SeqCst);
+        if !waker_ptr.is_null() {
+            unsafe {
                 let waker = waker_ptr.read();
                 waker.wake_by_ref();
                 waker_ptr.drop_in_place()
