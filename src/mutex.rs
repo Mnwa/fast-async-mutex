@@ -208,6 +208,7 @@ impl<T: Debug> Debug for MutexGuardFuture<'_, T> {
         f.debug_struct("MutexGuardFuture")
             .field("mutex", &self.mutex)
             .field("id", &self.id)
+            .field("is_realized", &self.is_realized)
             .finish()
     }
 }
@@ -225,6 +226,7 @@ impl<T: Debug> Debug for MutexOwnedGuardFuture<T> {
         f.debug_struct("MutexGuardFuture")
             .field("mutex", &self.mutex)
             .field("id", &self.id)
+            .field("is_realized", &self.is_realized)
             .finish()
     }
 }
