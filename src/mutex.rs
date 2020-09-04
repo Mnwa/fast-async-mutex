@@ -30,7 +30,7 @@ impl<T> Mutex<T> {
     pub fn lock(&self) -> MutexGuardFuture<T> {
         MutexGuardFuture {
             mutex: &self,
-            id: self.state.fetch_add(1, Ordering::Acquire),
+            id: self.state.fetch_add(1, Ordering::SeqCst),
         }
     }
 
@@ -38,7 +38,7 @@ impl<T> Mutex<T> {
     pub fn lock_owned(self: &Arc<Self>) -> MutexOwnedGuardFuture<T> {
         MutexOwnedGuardFuture {
             mutex: self.clone(),
-            id: self.state.fetch_add(1, Ordering::Acquire),
+            id: self.state.fetch_add(1, Ordering::SeqCst),
         }
     }
 }
@@ -71,13 +71,14 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
     type Output = MutexGuard<'a, T>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.current.load(Ordering::Relaxed) == self.id {
+        let current = self.mutex.current.load(Ordering::SeqCst);
+        if current == self.id {
             Poll::Ready(MutexGuard { mutex: self.mutex })
         } else {
-            if self.mutex.current.load(Ordering::Relaxed) == self.id - 1 {
+            if current == self.id - 1 {
                 self.mutex.waker.swap(
                     Box::into_raw(Box::new(cx.waker().clone())),
-                    Ordering::Acquire,
+                    Ordering::SeqCst,
                 );
             }
             Poll::Pending
@@ -89,15 +90,16 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
     type Output = MutexOwnedGuard<T>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.current.load(Ordering::Relaxed) == self.id {
+        let current = self.mutex.current.load(Ordering::SeqCst);
+        if current == self.id {
             Poll::Ready(MutexOwnedGuard {
                 mutex: self.mutex.clone(),
             })
         } else {
-            if self.mutex.current.load(Ordering::Relaxed) == self.id - 1 {
+            if current == self.id - 1 {
                 self.mutex.waker.swap(
                     Box::into_raw(Box::new(cx.waker().clone())),
-                    Ordering::Acquire,
+                    Ordering::SeqCst,
                 );
             }
 
@@ -136,10 +138,10 @@ impl<T: ?Sized> DerefMut for MutexOwnedGuard<T> {
 
 impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
-        self.mutex.current.fetch_add(1, Ordering::Acquire);
+        self.mutex.current.fetch_add(1, Ordering::SeqCst);
 
         unsafe {
-            let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::Acquire);
+            let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::SeqCst);
             if !waker_ptr.is_null() {
                 let waker = waker_ptr.read();
                 waker.wake_by_ref();
@@ -151,10 +153,10 @@ impl<T: ?Sized> Drop for MutexGuard<'_, T> {
 
 impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
     fn drop(&mut self) {
-        self.mutex.current.fetch_add(1, Ordering::Acquire);
+        self.mutex.current.fetch_add(1, Ordering::SeqCst);
 
         unsafe {
-            let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::Acquire);
+            let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::SeqCst);
             if !waker_ptr.is_null() {
                 let waker = waker_ptr.read();
                 waker.wake_by_ref();
