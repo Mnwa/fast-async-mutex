@@ -155,7 +155,6 @@ impl<T: ?Sized> Drop for MutexGuard<'_, T> {
             unsafe {
                 let waker = waker_ptr.read();
                 waker.wake_by_ref();
-                waker_ptr.drop_in_place()
             }
         }
     }
@@ -170,7 +169,6 @@ impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
             unsafe {
                 let waker = waker_ptr.read();
                 waker.wake_by_ref();
-                waker_ptr.drop_in_place()
             }
         }
     }
