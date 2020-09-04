@@ -1,8 +1,15 @@
 [package]
-name = "a-mutex-async"
-version = "0.1.0"
+name = "fast-async-mutex"
+version = "0.2.0"
 authors = ["Mnwa <mihan@panfilov.biz>"]
 edition = "2018"
+description = "The fast async mutex which uses spinlock algorithm with using waker"
+license = "Apache-2.0/MIT"
+keywords = ["mutex", "lock", "thread", "spin", "concurrency"]
+categories = ["concurrency"]
+readme = "README.md"
+documentation = "https://docs.rs/fast-async-mutex/"
+repository = "https://github.com/Mnwa/fast-async-mutex"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
