@@ -215,8 +215,6 @@ mod tests {
         let expected_result = 100;
         let c = Mutex::new(0);
 
-        let ins = Instant::now();
-
         futures::stream::iter(0..expected_result)
             .then(|i| c.lock().map(move |co| (i, co)))
             .for_each_concurrent(None, |(i, mut co)| async move {
@@ -224,8 +222,6 @@ mod tests {
                 *co += 1;
             })
             .await;
-
-        println!("{:?}", ins.elapsed());
 
         let co = c.lock().await;
         assert_eq!(*co, expected_result)
