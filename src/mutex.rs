@@ -207,7 +207,6 @@ mod tests {
     use futures::{FutureExt, StreamExt};
     use std::ops::AddAssign;
     use std::sync::Arc;
-    use std::time::Instant;
     use tokio::time::{delay_for, Duration};
 
     #[tokio::test(core_threads = 12)]
