@@ -4,7 +4,7 @@ use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
@@ -31,6 +31,7 @@ impl<T> Mutex<T> {
         MutexGuardFuture {
             mutex: &self,
             id: self.state.fetch_add(1, Ordering::SeqCst),
+            is_realized: Default::default(),
         }
     }
 
@@ -39,6 +40,7 @@ impl<T> Mutex<T> {
         MutexOwnedGuardFuture {
             mutex: self.clone(),
             id: self.state.fetch_add(1, Ordering::SeqCst),
+            is_realized: Default::default(),
         }
     }
 }
@@ -50,6 +52,7 @@ pub struct MutexGuard<'a, T: ?Sized> {
 pub struct MutexGuardFuture<'a, T: ?Sized> {
     mutex: &'a Mutex<T>,
     id: usize,
+    is_realized: AtomicBool,
 }
 
 pub struct MutexOwnedGuard<T: ?Sized> {
@@ -59,6 +62,7 @@ pub struct MutexOwnedGuard<T: ?Sized> {
 pub struct MutexOwnedGuardFuture<T: ?Sized> {
     mutex: Arc<Mutex<T>>,
     id: usize,
+    is_realized: AtomicBool,
 }
 
 unsafe impl<T: ?Sized + Send> Send for MutexGuard<'_, T> {}
@@ -73,9 +77,10 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let current = self.mutex.current.load(Ordering::SeqCst);
         if current == self.id {
+            self.is_realized.store(true, Ordering::SeqCst);
             Poll::Ready(MutexGuard { mutex: self.mutex })
         } else {
-            if current == self.id - 1 {
+            if Some(current) == self.id.checked_sub(1) {
                 self.mutex.waker.swap(
                     Box::into_raw(Box::new(cx.waker().clone())),
                     Ordering::SeqCst,
@@ -92,11 +97,12 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let current = self.mutex.current.load(Ordering::SeqCst);
         if current == self.id {
+            self.is_realized.store(true, Ordering::SeqCst);
             Poll::Ready(MutexOwnedGuard {
                 mutex: self.mutex.clone(),
             })
         } else {
-            if current == self.id - 1 {
+            if Some(current) == self.id.checked_sub(1) {
                 self.mutex.waker.swap(
                     Box::into_raw(Box::new(cx.waker().clone())),
                     Ordering::SeqCst,
@@ -166,6 +172,22 @@ impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
     }
 }
 
+impl<T: ?Sized> Drop for MutexGuardFuture<'_, T> {
+    fn drop(&mut self) {
+        if !self.is_realized.load(Ordering::SeqCst) {
+            self.mutex.current.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+}
+
+impl<T: ?Sized> Drop for MutexOwnedGuardFuture<T> {
+    fn drop(&mut self) {
+        if !self.is_realized.load(Ordering::SeqCst) {
+            self.mutex.current.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+}
+
 impl<T: Debug> Debug for Mutex<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Mutex")
@@ -214,8 +236,9 @@ impl<T: Debug> Debug for MutexOwnedGuard<T> {
 #[cfg(test)]
 mod tests {
     use crate::mutex::{Mutex, MutexGuard, MutexOwnedGuard};
-    use futures::{FutureExt, StreamExt};
+    use futures::{FutureExt, StreamExt, TryStreamExt};
     use std::ops::AddAssign;
+    use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
     use tokio::time::{delay_for, Duration};
 
@@ -269,6 +292,42 @@ mod tests {
     #[tokio::test]
     async fn test_container() {
         let c = Mutex::new(String::from("lol"));
+
+        let mut co: MutexGuard<String> = c.lock().await;
+        co.add_assign("lol");
+
+        assert_eq!(*co, "lollol");
+    }
+
+    #[tokio::test]
+    async fn test_overflow() {
+        let mut c = Mutex::new(String::from("lol"));
+
+        c.state = AtomicUsize::new(usize::max_value());
+        c.current = AtomicUsize::new(usize::max_value());
+
+        let mut co: MutexGuard<String> = c.lock().await;
+        co.add_assign("lol");
+
+        assert_eq!(*co, "lollol");
+    }
+
+    #[tokio::test]
+    async fn test_timeout() {
+        let mut c = Mutex::new(String::from("lol"));
+
+        c.state = AtomicUsize::new(usize::max_value());
+        c.current = AtomicUsize::new(usize::max_value());
+
+        let co: MutexGuard<String> = c.lock().await;
+
+        futures::stream::iter(0..10000i32)
+            .then(|_| tokio::time::timeout(Duration::from_nanos(1), c.lock()))
+            .try_for_each_concurrent(None, |_c| futures::future::ok(()))
+            .await
+            .expect_err("timout must be");
+
+        drop(co);
 
         let mut co: MutexGuard<String> = c.lock().await;
         co.add_assign("lol");
