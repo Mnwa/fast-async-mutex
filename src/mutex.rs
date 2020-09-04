@@ -163,7 +163,7 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
     }
 }
 
-#[inline]
+#[inline(always)]
 fn get_waker_ptr(waker: &Waker) -> *mut Waker {
     let waker = waker.clone();
     Box::into_raw(Box::new(waker))
@@ -233,7 +233,7 @@ impl<T: ?Sized> Drop for MutexOwnedGuardFuture<T> {
     }
 }
 
-#[inline]
+#[inline(always)]
 fn wake_ptr(waker_ptr: &AtomicPtr<Waker>) {
     let waker_ptr = waker_ptr.swap(null_mut(), Ordering::AcqRel);
 
