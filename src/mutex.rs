@@ -36,9 +36,12 @@ impl<T> Mutex<T> {
     /// ```
     /// use fast_async_mutex::mutex::Mutex;
     ///
-    /// let mutex = Mutex::new(10);
-    /// let guard = mutex.lock().await;
-    /// assert_eq!(*guard, 10);
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mutex = Mutex::new(10);
+    ///     let guard = mutex.lock().await;
+    ///     assert_eq!(*guard, 10);
+    /// }
     /// ```
     #[inline]
     pub fn lock(&self) -> MutexGuardFuture<T> {
@@ -59,10 +62,12 @@ impl<T> Mutex<T> {
     /// ```
     /// use fast_async_mutex::mutex::Mutex;
     /// use std::sync::Arc;
-    ///
-    /// let mutex = Arc::new(Mutex::new(10));
-    /// let guard = mutex.lock_owned().await;
-    /// assert_eq!(*guard, 10);
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mutex = Arc::new(Mutex::new(10));
+    ///     let guard = mutex.lock_owned().await;
+    ///     assert_eq!(*guard, 10);
+    /// }
     /// ```
     #[inline]
     pub fn lock_owned(self: &Arc<Self>) -> MutexOwnedGuardFuture<T> {
