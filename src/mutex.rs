@@ -211,6 +211,21 @@ mod tests {
 
     #[tokio::test(core_threads = 12)]
     async fn test_mutex() {
+        let c = Mutex::new(0);
+
+        futures::stream::iter(0..10000)
+            .for_each_concurrent(None, |_| async {
+                let mut co: MutexGuard<i32> = c.lock().await;
+                *co += 1;
+            })
+            .await;
+
+        let co = c.lock().await;
+        assert_eq!(*co, 10000)
+    }
+
+    #[tokio::test(core_threads = 12)]
+    async fn test_mutex_delay() {
         let expected_result = 100;
         let c = Mutex::new(0);
 
