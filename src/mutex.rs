@@ -130,7 +130,7 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
                     null_mut(),
                     Box::into_raw(Box::new(cx.waker().clone())),
                     Ordering::AcqRel,
-                    Ordering::AcqRel,
+                    Ordering::Acquire,
                 );
             }
             Poll::Pending
@@ -154,7 +154,7 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
                     null_mut(),
                     Box::into_raw(Box::new(cx.waker().clone())),
                     Ordering::AcqRel,
-                    Ordering::AcqRel,
+                    Ordering::Acquire,
                 );
             }
 
