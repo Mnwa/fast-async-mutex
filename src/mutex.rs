@@ -3,29 +3,26 @@ use std::fmt::{Debug, Formatter};
 use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::ptr::null_mut;
+use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 pub struct Mutex<T: ?Sized> {
     state: AtomicUsize,
     current: AtomicUsize,
-    waker_send: Sender<Waker>,
-    waker_recv: Receiver<Waker>,
+    waker: AtomicPtr<Waker>,
     data: UnsafeCell<T>,
 }
 
 impl<T> Mutex<T> {
     #[inline]
     pub fn new(data: T) -> Mutex<T> {
-        let (waker_send, waker_recv) = channel();
         Mutex {
             state: Default::default(),
             current: Default::default(),
+            waker: Default::default(),
             data: UnsafeCell::new(data),
-            waker_send,
-            waker_recv,
         }
     }
 
@@ -78,10 +75,10 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
             Poll::Ready(MutexGuard { mutex: self.mutex })
         } else {
             if self.mutex.current.load(Ordering::Relaxed) == self.id - 1 {
-                self.mutex
-                    .waker_send
-                    .send(cx.waker().clone())
-                    .expect("cannot to send waker");
+                self.mutex.waker.swap(
+                    Box::into_raw(Box::new(cx.waker().clone())),
+                    Ordering::Acquire,
+                );
             }
             Poll::Pending
         }
@@ -98,10 +95,10 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
             })
         } else {
             if self.mutex.current.load(Ordering::Relaxed) == self.id - 1 {
-                self.mutex
-                    .waker_send
-                    .send(cx.waker().clone())
-                    .expect("cannot to send waker");
+                self.mutex.waker.swap(
+                    Box::into_raw(Box::new(cx.waker().clone())),
+                    Ordering::Acquire,
+                );
             }
 
             Poll::Pending
@@ -141,8 +138,12 @@ impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         self.mutex.current.fetch_add(1, Ordering::Acquire);
 
-        if let Ok(waker) = self.mutex.waker_recv.try_recv() {
-            waker.wake();
+        unsafe {
+            let waker = self.mutex.waker.swap(null_mut(), Ordering::Acquire);
+            if !waker.is_null() {
+                let waker = waker.read();
+                waker.wake_by_ref();
+            }
         }
     }
 }
@@ -151,8 +152,12 @@ impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
     fn drop(&mut self) {
         self.mutex.current.fetch_add(1, Ordering::Acquire);
 
-        if let Ok(waker) = self.mutex.waker_recv.try_recv() {
-            waker.wake();
+        unsafe {
+            let waker = self.mutex.waker.swap(null_mut(), Ordering::Acquire);
+            if !waker.is_null() {
+                let waker = waker.read();
+                waker.wake_by_ref();
+            }
         }
     }
 }
@@ -162,6 +167,7 @@ impl<T: Debug> Debug for Mutex<T> {
         f.debug_struct("Mutex")
             .field("state", &self.state)
             .field("current", &self.current)
+            .field("waker", &self.waker)
             .field("data", &self.data)
             .finish()
     }
