@@ -9,4 +9,5 @@ edition = "2018"
 [dependencies]
 
 [dev-dependencies]
-tokio = { version = "0.2", features = ["rt-threaded", "macros"] }
+tokio = { version = "0.2", features = ["rt-threaded", "macros", "time"] }
+futures = "0.3"
