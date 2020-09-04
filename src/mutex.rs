@@ -139,10 +139,11 @@ impl<T: ?Sized> Drop for MutexGuard<'_, T> {
         self.mutex.current.fetch_add(1, Ordering::Acquire);
 
         unsafe {
-            let waker = self.mutex.waker.swap(null_mut(), Ordering::Acquire);
-            if !waker.is_null() {
-                let waker = waker.read();
+            let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::Acquire);
+            if !waker_ptr.is_null() {
+                let waker = waker_ptr.read();
                 waker.wake_by_ref();
+                waker_ptr.drop_in_place()
             }
         }
     }
@@ -153,10 +154,11 @@ impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
         self.mutex.current.fetch_add(1, Ordering::Acquire);
 
         unsafe {
-            let waker = self.mutex.waker.swap(null_mut(), Ordering::Acquire);
-            if !waker.is_null() {
-                let waker = waker.read();
+            let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::Acquire);
+            if !waker_ptr.is_null() {
+                let waker = waker_ptr.read();
                 waker.wake_by_ref();
+                waker_ptr.drop_in_place()
             }
         }
     }
