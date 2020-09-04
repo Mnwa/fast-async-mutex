@@ -142,7 +142,7 @@ impl<T: ?Sized> Drop for MutexGuard<'_, T> {
         self.mutex.current.fetch_add(1, Ordering::Acquire);
 
         if let Ok(waker) = self.mutex.waker_recv.try_recv() {
-            waker.wake_by_ref();
+            waker.wake();
         }
     }
 }
@@ -152,7 +152,7 @@ impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
         self.mutex.current.fetch_add(1, Ordering::Acquire);
 
         if let Ok(waker) = self.mutex.waker_recv.try_recv() {
-            waker.wake_by_ref();
+            waker.wake();
         }
     }
 }
