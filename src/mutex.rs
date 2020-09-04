@@ -128,7 +128,7 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
             if Some(current) == self.id.checked_sub(1) {
                 let _ = self.mutex.waker.compare_exchange_weak(
                     null_mut(),
-                    Box::into_raw(Box::new(cx.waker().clone())),
+                    get_waker_ptr(cx.waker()),
                     Ordering::AcqRel,
                     Ordering::Acquire,
                 );
@@ -152,7 +152,7 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
             if Some(current) == self.id.checked_sub(1) {
                 let _ = self.mutex.waker.compare_exchange_weak(
                     null_mut(),
-                    Box::into_raw(Box::new(cx.waker().clone())),
+                    get_waker_ptr(cx.waker()),
                     Ordering::AcqRel,
                     Ordering::Acquire,
                 );
@@ -163,17 +163,23 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
     }
 }
 
+#[inline]
+fn get_waker_ptr(waker: &Waker) -> *mut Waker {
+    let waker = waker.clone();
+    Box::into_raw(Box::new(waker))
+}
+
 impl<T: ?Sized> Deref for MutexGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { self.mutex.data.get().as_ref().expect("mutex: empty ptr") }
+        unsafe { &*self.mutex.data.get() }
     }
 }
 
 impl<T: ?Sized> DerefMut for MutexGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.mutex.data.get().as_mut().expect("mutex: empty ptr") }
+        unsafe { &mut *self.mutex.data.get() }
     }
 }
 
@@ -181,13 +187,13 @@ impl<T: ?Sized> Deref for MutexOwnedGuard<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { self.mutex.data.get().as_ref().expect("mutex: empty ptr") }
+        unsafe { &*self.mutex.data.get() }
     }
 }
 
 impl<T: ?Sized> DerefMut for MutexOwnedGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.mutex.data.get().as_mut().expect("mutex: empty ptr") }
+        unsafe { &mut *self.mutex.data.get() }
     }
 }
 
