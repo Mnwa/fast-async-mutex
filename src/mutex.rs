@@ -48,7 +48,7 @@ impl<T> Mutex<T> {
     pub fn lock(&self) -> MutexGuardFuture<T> {
         MutexGuardFuture {
             mutex: &self,
-            id: self.state.fetch_add(1, Ordering::SeqCst),
+            id: self.state.fetch_add(1, Ordering::Relaxed),
             is_realized: Default::default(),
         }
     }
@@ -74,7 +74,7 @@ impl<T> Mutex<T> {
     pub fn lock_owned(self: &Arc<Self>) -> MutexOwnedGuardFuture<T> {
         MutexOwnedGuardFuture {
             mutex: self.clone(),
-            id: self.state.fetch_add(1, Ordering::SeqCst),
+            id: self.state.fetch_add(1, Ordering::Relaxed),
             is_realized: Default::default(),
         }
     }
@@ -120,17 +120,17 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
     type Output = MutexGuard<'a, T>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let current = self.mutex.current.load(Ordering::SeqCst);
+        let current = self.mutex.current.load(Ordering::Relaxed);
         if current == self.id {
-            self.is_realized.store(true, Ordering::SeqCst);
+            self.is_realized.store(true, Ordering::Relaxed);
             Poll::Ready(MutexGuard { mutex: self.mutex })
         } else {
             if Some(current) == self.id.checked_sub(1) {
                 let _ = self.mutex.waker.compare_exchange_weak(
                     null_mut(),
                     Box::into_raw(Box::new(cx.waker().clone())),
-                    Ordering::SeqCst,
-                    Ordering::SeqCst,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
                 );
             }
             Poll::Pending
@@ -142,9 +142,9 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
     type Output = MutexOwnedGuard<T>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let current = self.mutex.current.load(Ordering::SeqCst);
+        let current = self.mutex.current.load(Ordering::Relaxed);
         if current == self.id {
-            self.is_realized.store(true, Ordering::SeqCst);
+            self.is_realized.store(true, Ordering::Relaxed);
             Poll::Ready(MutexOwnedGuard {
                 mutex: self.mutex.clone(),
             })
@@ -153,8 +153,8 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
                 let _ = self.mutex.waker.compare_exchange_weak(
                     null_mut(),
                     Box::into_raw(Box::new(cx.waker().clone())),
-                    Ordering::SeqCst,
-                    Ordering::SeqCst,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
                 );
             }
 
@@ -193,9 +193,9 @@ impl<T: ?Sized> DerefMut for MutexOwnedGuard<T> {
 
 impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
-        self.mutex.current.fetch_add(1, Ordering::SeqCst);
+        self.mutex.current.fetch_add(1, Ordering::Relaxed);
 
-        let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::SeqCst);
+        let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::Relaxed);
         if !waker_ptr.is_null() {
             unsafe {
                 let waker = waker_ptr.read();
@@ -207,9 +207,9 @@ impl<T: ?Sized> Drop for MutexGuard<'_, T> {
 
 impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
     fn drop(&mut self) {
-        self.mutex.current.fetch_add(1, Ordering::SeqCst);
+        self.mutex.current.fetch_add(1, Ordering::Relaxed);
 
-        let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::SeqCst);
+        let waker_ptr = self.mutex.waker.swap(null_mut(), Ordering::Relaxed);
         if !waker_ptr.is_null() {
             unsafe {
                 let waker = waker_ptr.read();
@@ -221,16 +221,16 @@ impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
 
 impl<T: ?Sized> Drop for MutexGuardFuture<'_, T> {
     fn drop(&mut self) {
-        if !self.is_realized.load(Ordering::SeqCst) {
-            self.mutex.current.fetch_add(1, Ordering::SeqCst);
+        if !self.is_realized.load(Ordering::Relaxed) {
+            self.mutex.current.fetch_add(1, Ordering::Relaxed);
         }
     }
 }
 
 impl<T: ?Sized> Drop for MutexOwnedGuardFuture<T> {
     fn drop(&mut self) {
-        if !self.is_realized.load(Ordering::SeqCst) {
-            self.mutex.current.fetch_add(1, Ordering::SeqCst);
+        if !self.is_realized.load(Ordering::Relaxed) {
+            self.mutex.current.fetch_add(1, Ordering::Relaxed);
         }
     }
 }
