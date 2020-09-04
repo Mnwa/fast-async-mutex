@@ -19,11 +19,11 @@ pub struct Mutex<T: ?Sized> {
 
 impl<T> Mutex<T> {
     #[inline]
-    pub fn new(data: T) -> Mutex<T> {
+    pub const fn new(data: T) -> Mutex<T> {
         Mutex {
-            state: Default::default(),
-            current: Default::default(),
-            waker: Default::default(),
+            state: AtomicUsize::new(0),
+            current: AtomicUsize::new(0),
+            waker: AtomicPtr::new(null_mut()),
             data: UnsafeCell::new(data),
         }
     }
