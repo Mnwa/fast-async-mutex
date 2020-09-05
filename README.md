@@ -23,6 +23,28 @@ async fn main() {
 }
 ```
 
+## Benchmarks
+
+There is result of benchmarks which runs on `MacBook Pro (16-inch, 2019) 2,3 GHz 8-Core Intel Core i9 16GB RAM`
+Tests you can find in the [benchmarks dir](benchmarks).
+```
+running 12 tests
+test fast_async_mutex::tests::concurrency_without_waiting  ... bench:   1,579,327 ns/iter (+/- 122,787)
+test fast_async_mutex::tests::create                       ... bench:           0 ns/iter (+/- 0)
+test fast_async_mutex::tests::step_by_step_without_waiting ... bench:     194,037 ns/iter (+/- 18,457)
+test futures::tests::concurrency_without_waiting           ... bench:   1,623,903 ns/iter (+/- 198,099)
+test futures::tests::create                                ... bench:          84 ns/iter (+/- 20)
+test futures::tests::step_by_step_without_waiting          ... bench:     205,545 ns/iter (+/- 11,437)
+test smol::tests::concurrency_without_waiting              ... bench:   1,813,222 ns/iter (+/- 88,291)
+test smol::tests::create                                   ... bench:           0 ns/iter (+/- 0)
+test smol::tests::step_by_step_without_waiting             ... bench:     329,124 ns/iter (+/- 33,841)
+test tokio::tests::concurrency_without_waiting             ... bench:  22,625,869 ns/iter (+/- 6,185,517)
+test tokio::tests::create                                  ... bench:          98 ns/iter (+/- 54)
+test tokio::tests::step_by_step_without_waiting            ... bench:     718,106 ns/iter (+/- 157,179)
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 12 measured; 0 filtered out
+```
+
 ## License
 
 Licensed under either of
