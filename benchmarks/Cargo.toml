@@ -6,8 +6,8 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
+[dev-dependencies]
 smol = "0.4"
-fast-async-mutex = "0.3.7"
 futures = "0.3"
 tokio = { version = "0.2", features = ["rt-threaded", "macros", "time", "sync"] }
+fast-async-mutex = { version = "0.3", path = "../" }
