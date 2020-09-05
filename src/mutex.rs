@@ -128,7 +128,7 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
             if Some(current) == self.id.checked_sub(1) {
                 let _ = self.mutex.waker.compare_exchange_weak(
                     null_mut(),
-                    get_waker_ptr(cx.waker()),
+                    Box::into_raw(Box::new(cx.waker().clone())),
                     Ordering::AcqRel,
                     Ordering::Acquire,
                 );
@@ -152,7 +152,7 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
             if Some(current) == self.id.checked_sub(1) {
                 let _ = self.mutex.waker.compare_exchange_weak(
                     null_mut(),
-                    get_waker_ptr(cx.waker()),
+                    Box::into_raw(Box::new(cx.waker().clone())),
                     Ordering::AcqRel,
                     Ordering::Acquire,
                 );
@@ -161,12 +161,6 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
             Poll::Pending
         }
     }
-}
-
-#[inline(always)]
-fn get_waker_ptr(waker: &Waker) -> *mut Waker {
-    let waker = waker.clone();
-    Box::into_raw(Box::new(waker))
 }
 
 impl<T: ?Sized> Deref for MutexGuard<'_, T> {
@@ -233,13 +227,13 @@ impl<T: ?Sized> Drop for MutexOwnedGuardFuture<T> {
     }
 }
 
-#[inline(always)]
+#[inline]
 fn wake_ptr(waker_ptr: &AtomicPtr<Waker>) {
-    let waker_ptr = waker_ptr.swap(null_mut(), Ordering::AcqRel);
-
-    unsafe {
-        if let Some(waker) = waker_ptr.as_ref() {
-            waker.wake_by_ref();
+    if let Err(waker_ptr) =
+        waker_ptr.compare_exchange_weak(null_mut(), null_mut(), Ordering::AcqRel, Ordering::Acquire)
+    {
+        unsafe {
+            (*waker_ptr).wake_by_ref();
             waker_ptr.drop_in_place();
         }
     }
