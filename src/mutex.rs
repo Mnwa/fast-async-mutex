@@ -4,7 +4,7 @@ use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
@@ -49,7 +49,7 @@ impl<T> Mutex<T> {
         MutexGuardFuture {
             mutex: &self,
             id: self.state.fetch_add(1, Ordering::AcqRel),
-            is_realized: Default::default(),
+            is_realized: false,
         }
     }
 
@@ -75,7 +75,7 @@ impl<T> Mutex<T> {
         MutexOwnedGuardFuture {
             mutex: self.clone(),
             id: self.state.fetch_add(1, Ordering::AcqRel),
-            is_realized: Default::default(),
+            is_realized: false,
         }
     }
 }
@@ -90,7 +90,7 @@ pub struct MutexGuard<'a, T: ?Sized> {
 pub struct MutexGuardFuture<'a, T: ?Sized> {
     mutex: &'a Mutex<T>,
     id: usize,
-    is_realized: AtomicBool,
+    is_realized: bool,
 }
 
 /// An owned handle to a held Mutex.
@@ -119,18 +119,18 @@ unsafe impl<T: ?Sized + Send> Sync for MutexOwnedGuard<T> {}
 impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
     type Output = MutexGuard<'a, T>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let current = self.mutex.current.load(Ordering::Acquire);
         if current == self.id {
-            self.is_realized.store(true, Ordering::Release);
+            self.is_realized = true;
             Poll::Ready(MutexGuard { mutex: self.mutex })
         } else {
             if Some(current) == self.id.checked_sub(1) {
                 let _ = self.mutex.waker.compare_exchange_weak(
                     null_mut(),
-                    Box::into_raw(Box::new(cx.waker().clone())),
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
+                    cx.waker() as *const Waker as *mut Waker,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
                 );
             }
             Poll::Pending
@@ -152,9 +152,9 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
             if Some(current) == self.id.checked_sub(1) {
                 let _ = self.mutex.waker.compare_exchange_weak(
                     null_mut(),
-                    Box::into_raw(Box::new(cx.waker().clone())),
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
+                    cx.waker() as *const Waker as *mut Waker,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
                 );
             }
 
@@ -209,7 +209,7 @@ impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
 
 impl<T: ?Sized> Drop for MutexGuardFuture<'_, T> {
     fn drop(&mut self) {
-        if !self.is_realized.load(Ordering::Relaxed) {
+        if !self.is_realized {
             self.mutex.current.fetch_add(1, Ordering::AcqRel);
 
             wake_ptr(&self.mutex.waker)
@@ -234,7 +234,6 @@ fn wake_ptr(waker_ptr: &AtomicPtr<Waker>) {
     {
         unsafe {
             (*waker_ptr).wake_by_ref();
-            waker_ptr.drop_in_place();
         }
     }
 }
