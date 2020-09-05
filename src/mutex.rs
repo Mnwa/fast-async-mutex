@@ -129,8 +129,8 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
                 let _ = self.mutex.waker.compare_exchange_weak(
                     null_mut(),
                     cx.waker() as *const Waker as *mut Waker,
-                    Ordering::Relaxed,
-                    Ordering::Relaxed,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
                 );
             }
             Poll::Pending
@@ -153,8 +153,8 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
                 let _ = self.mutex.waker.compare_exchange_weak(
                     null_mut(),
                     cx.waker() as *const Waker as *mut Waker,
-                    Ordering::Relaxed,
-                    Ordering::Relaxed,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
                 );
             }
 
