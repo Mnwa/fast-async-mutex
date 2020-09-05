@@ -104,7 +104,7 @@ pub struct MutexOwnedGuard<T: ?Sized> {
 pub struct MutexOwnedGuardFuture<T: ?Sized> {
     mutex: Arc<Mutex<T>>,
     id: usize,
-    is_realized: AtomicBool,
+    is_realized: bool,
 }
 
 unsafe impl<T: ?Sized + Send> Send for Mutex<T> {}
@@ -141,10 +141,10 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
 impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
     type Output = MutexOwnedGuard<T>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let current = self.mutex.current.load(Ordering::Acquire);
         if current == self.id {
-            self.is_realized.store(true, Ordering::Release);
+            self.is_realized = true;
             Poll::Ready(MutexOwnedGuard {
                 mutex: self.mutex.clone(),
             })
@@ -225,7 +225,7 @@ impl<T: ?Sized> Drop for MutexGuardFuture<'_, T> {
 
 impl<T: ?Sized> Drop for MutexOwnedGuardFuture<T> {
     fn drop(&mut self) {
-        if !self.is_realized.load(Ordering::Relaxed) {
+        if !self.is_realized {
             self.mutex.current.fetch_add(1, Ordering::AcqRel);
 
             wake_ptr(&self.mutex.waker)
