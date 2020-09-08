@@ -12,7 +12,7 @@ use std::task::{Context, Poll, Waker};
 /// It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
 ///
 /// The main difference with the standard `Mutex` is unordered mutex will not check an ordering of blocking.
-/// This way is much faster, but there is some risks what someone mutex lock will be executed so slow.
+/// This way is much faster, but there are some risks what someone mutex lock will be executed much later.
 pub struct UnorderedMutex<T: ?Sized> {
     is_acquired: AtomicBool,
     waker: AtomicPtr<Waker>,
