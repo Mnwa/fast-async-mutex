@@ -192,20 +192,14 @@ pub struct RwLockReadOwnedGuardFuture<T: ?Sized> {
     is_realized: bool,
 }
 
-unsafe impl<T: ?Sized + Send> Send for RwLock<T> {}
-unsafe impl<T: ?Sized + Send> Sync for RwLock<T> {}
+unsafe impl<T> Send for RwLock<T> where T: Send + ?Sized {}
+unsafe impl<T> Sync for RwLock<T> where T: Send + Sync + ?Sized {}
 
-unsafe impl<T: ?Sized + Send> Send for RwLockWriteGuard<'_, T> {}
-unsafe impl<T: ?Sized + Send> Sync for RwLockWriteGuard<'_, T> {}
+unsafe impl<T> Sync for RwLockReadGuard<'_, T> where T: Send + Sync + ?Sized {}
+unsafe impl<T> Sync for RwLockReadOwnedGuard<T> where T: Send + Sync + ?Sized {}
 
-unsafe impl<T: ?Sized + Send> Send for RwLockWriteOwnedGuard<T> {}
-unsafe impl<T: ?Sized + Send> Sync for RwLockWriteOwnedGuard<T> {}
-
-unsafe impl<T: ?Sized + Send> Send for RwLockReadGuard<'_, T> {}
-unsafe impl<T: ?Sized + Send> Sync for RwLockReadGuard<'_, T> {}
-
-unsafe impl<T: ?Sized + Send> Send for RwLockReadOwnedGuard<T> {}
-unsafe impl<T: ?Sized + Send> Sync for RwLockReadOwnedGuard<T> {}
+unsafe impl<T> Sync for RwLockWriteGuard<'_, T> where T: Send + Sync + ?Sized {}
+unsafe impl<T> Sync for RwLockWriteOwnedGuard<T> where T: Send + Sync + ?Sized {}
 
 impl<'a, T: ?Sized> Future for RwLockWriteGuardFuture<'a, T> {
     type Output = RwLockWriteGuard<'a, T>;
@@ -560,7 +554,7 @@ mod tests {
         assert_eq!(*co, 10000)
     }
 
-    #[tokio::test]
+    #[tokio::test(core_threads = 12)]
     async fn test_container() {
         let c = RwLock::new(String::from("lol"));
 
@@ -570,7 +564,7 @@ mod tests {
         assert_eq!(*co, "lollol");
     }
 
-    #[tokio::test]
+    #[tokio::test(core_threads = 12)]
     async fn test_overflow() {
         let mut c = RwLock::new(String::from("lol"));
 
@@ -583,7 +577,7 @@ mod tests {
         assert_eq!(*co, "lollol");
     }
 
-    #[tokio::test]
+    #[tokio::test(core_threads = 12)]
     async fn test_timeout() {
         let c = RwLock::new(String::from("lol"));
 
@@ -603,7 +597,7 @@ mod tests {
         assert_eq!(*co, "lollol");
     }
 
-    #[tokio::test]
+    #[tokio::test(core_threads = 12)]
     async fn test_concurrent_reading() {
         let c = RwLock::new(String::from("lol"));
 
@@ -624,7 +618,7 @@ mod tests {
         assert_eq!(*co, *co2);
     }
 
-    #[tokio::test]
+    #[tokio::test(core_threads = 12)]
     async fn test_concurrent_reading_writing() {
         let c = RwLock::new(String::from("lol"));
 
