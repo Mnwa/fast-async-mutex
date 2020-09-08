@@ -29,21 +29,21 @@ There is result of benchmarks which runs on `MacBook Pro (16-inch, 2019) 2,3 GHz
 Tests you can find in the [benchmarks dir](benchmarks).
 ```
 running 15 tests
-test fast_async_mutex::tests::concurrency_without_waiting            ... bench:   1,596,189 ns/iter (+/- 128,344)
+test fast_async_mutex::tests::concurrency_without_waiting            ... bench:   1,586,483 ns/iter (+/- 118,637)
 test fast_async_mutex::tests::create                                 ... bench:           0 ns/iter (+/- 0)
-test fast_async_mutex::tests::step_by_step_without_waiting           ... bench:     172,753 ns/iter (+/- 16,961)
-test fast_async_mutex_unordered::tests::concurrency_without_waiting  ... bench:   1,598,340 ns/iter (+/- 124,138)
+test fast_async_mutex::tests::step_by_step_without_waiting           ... bench:     168,055 ns/iter (+/- 33,155)
+test fast_async_mutex_unordered::tests::concurrency_without_waiting  ... bench:   1,525,709 ns/iter (+/- 116,901)
 test fast_async_mutex_unordered::tests::create                       ... bench:           0 ns/iter (+/- 0)
-test fast_async_mutex_unordered::tests::step_by_step_without_waiting ... bench:     134,804 ns/iter (+/- 16,646)
-test futures::tests::concurrency_without_waiting                     ... bench:   1,665,560 ns/iter (+/- 199,774)
-test futures::tests::create                                          ... bench:          89 ns/iter (+/- 24)
-test futures::tests::step_by_step_without_waiting                    ... bench:     207,111 ns/iter (+/- 19,629)
-test smol::tests::concurrency_without_waiting                        ... bench:   1,881,085 ns/iter (+/- 139,396)
+test fast_async_mutex_unordered::tests::step_by_step_without_waiting ... bench:      84,197 ns/iter (+/- 22,894)
+test futures::tests::concurrency_without_waiting                     ... bench:   1,659,640 ns/iter (+/- 127,051)
+test futures::tests::create                                          ... bench:          91 ns/iter (+/- 9)
+test futures::tests::step_by_step_without_waiting                    ... bench:     206,003 ns/iter (+/- 28,685)
+test smol::tests::concurrency_without_waiting                        ... bench:   1,861,629 ns/iter (+/- 160,359)
 test smol::tests::create                                             ... bench:           0 ns/iter (+/- 0)
-test smol::tests::step_by_step_without_waiting                       ... bench:     342,648 ns/iter (+/- 74,680)
-test tokio::tests::concurrency_without_waiting                       ... bench:  22,845,551 ns/iter (+/- 1,920,176)
-test tokio::tests::create                                            ... bench:          88 ns/iter (+/- 22)
-test tokio::tests::step_by_step_without_waiting                      ... bench:     723,938 ns/iter (+/- 131,765)
+test smol::tests::step_by_step_without_waiting                       ... bench:     367,434 ns/iter (+/- 69,082)
+test tokio::tests::concurrency_without_waiting                       ... bench:  22,798,759 ns/iter (+/- 2,861,692)
+test tokio::tests::create                                            ... bench:          87 ns/iter (+/- 27)
+test tokio::tests::step_by_step_without_waiting                      ... bench:     733,205 ns/iter (+/- 126,314)
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 15 measured; 0 filtered out
 ```
