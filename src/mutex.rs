@@ -254,7 +254,7 @@ impl<T: Debug> Debug for MutexGuardFuture<'_, T> {
 
 impl<T: Debug> Debug for MutexGuard<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexGuardFuture")
+        f.debug_struct("MutexGuard")
             .field("mutex", &self.mutex)
             .finish()
     }
@@ -262,7 +262,7 @@ impl<T: Debug> Debug for MutexGuard<'_, T> {
 
 impl<T: Debug> Debug for MutexOwnedGuardFuture<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexGuardFuture")
+        f.debug_struct("MutexOwnedGuardFuture")
             .field("mutex", &self.mutex)
             .field("id", &self.id)
             .field("is_realized", &self.is_realized)
@@ -272,7 +272,7 @@ impl<T: Debug> Debug for MutexOwnedGuardFuture<T> {
 
 impl<T: Debug> Debug for MutexOwnedGuard<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexGuardFuture")
+        f.debug_struct("MutexOwnedGuard")
             .field("mutex", &self.mutex)
             .finish()
     }
