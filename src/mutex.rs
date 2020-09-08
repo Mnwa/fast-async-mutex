@@ -110,6 +110,10 @@ pub struct MutexOwnedGuardFuture<T: ?Sized> {
 
 unsafe impl<T> Send for Mutex<T> where T: ?Sized + Send {}
 unsafe impl<T> Sync for Mutex<T> where T: ?Sized + Send {}
+
+unsafe impl<T> Send for MutexGuard<'_, T> where T: ?Sized + Send {}
+unsafe impl<T> Send for MutexOwnedGuard<T> where T: ?Sized + Send {}
+
 unsafe impl<T> Sync for MutexGuard<'_, T> where T: ?Sized + Send + Sync {}
 unsafe impl<T> Sync for MutexOwnedGuard<T> where T: ?Sized + Send + Sync {}
 

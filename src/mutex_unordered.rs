@@ -107,6 +107,10 @@ pub struct UnorderedMutexOwnedGuardFuture<T: ?Sized> {
 
 unsafe impl<T> Send for UnorderedMutex<T> where T: ?Sized + Send {}
 unsafe impl<T> Sync for UnorderedMutex<T> where T: ?Sized + Send {}
+
+unsafe impl<T> Send for UnorderedMutexGuard<'_, T> where T: ?Sized + Send {}
+unsafe impl<T> Send for UnorderedMutexOwnedGuard<T> where T: ?Sized + Send {}
+
 unsafe impl<T> Sync for UnorderedMutexGuard<'_, T> where T: ?Sized + Send + Sync {}
 unsafe impl<T> Sync for UnorderedMutexOwnedGuard<T> where T: ?Sized + Send + Sync {}
 

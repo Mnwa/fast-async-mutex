@@ -195,8 +195,14 @@ pub struct RwLockReadOwnedGuardFuture<T: ?Sized> {
 unsafe impl<T> Send for RwLock<T> where T: Send + ?Sized {}
 unsafe impl<T> Sync for RwLock<T> where T: Send + Sync + ?Sized {}
 
+unsafe impl<T> Send for RwLockReadGuard<'_, T> where T: ?Sized + Send {}
+unsafe impl<T> Send for RwLockReadOwnedGuard<T> where T: ?Sized + Send {}
+
 unsafe impl<T> Sync for RwLockReadGuard<'_, T> where T: Send + Sync + ?Sized {}
 unsafe impl<T> Sync for RwLockReadOwnedGuard<T> where T: Send + Sync + ?Sized {}
+
+unsafe impl<T> Send for RwLockWriteGuard<'_, T> where T: ?Sized + Send {}
+unsafe impl<T> Send for RwLockWriteOwnedGuard<T> where T: ?Sized + Send {}
 
 unsafe impl<T> Sync for RwLockWriteGuard<'_, T> where T: Send + Sync + ?Sized {}
 unsafe impl<T> Sync for RwLockWriteOwnedGuard<T> where T: Send + Sync + ?Sized {}
