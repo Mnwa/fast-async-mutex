@@ -8,18 +8,21 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
-/// An async mutex.
+/// An async `unordered` mutex.
 /// It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
-pub struct Mutex<T: ?Sized> {
+///
+/// The main difference with the standard `Mutex` is unordered mutex will not check an ordering of blocking.
+/// This way is much faster, but there is some risks what someone mutex lock will be executed so slow.
+pub struct UnorderedMutex<T: ?Sized> {
     is_acquired: AtomicBool,
     waker: AtomicPtr<Waker>,
     data: UnsafeCell<T>,
 }
 
-impl<T> Mutex<T> {
+impl<T> UnorderedMutex<T> {
     #[inline]
-    pub const fn new(data: T) -> Mutex<T> {
-        Mutex {
+    pub const fn new(data: T) -> UnorderedMutex<T> {
+        UnorderedMutex {
             is_acquired: AtomicBool::new(false),
             waker: AtomicPtr::new(null_mut()),
             data: UnsafeCell::new(data),
@@ -43,8 +46,8 @@ impl<T> Mutex<T> {
     /// }
     /// ```
     #[inline]
-    pub fn lock(&self) -> MutexGuardFuture<T> {
-        MutexGuardFuture {
+    pub fn lock(&self) -> UnorderedMutexGuardFuture<T> {
+        UnorderedMutexGuardFuture {
             mutex: &self,
             is_realized: false,
         }
@@ -68,8 +71,8 @@ impl<T> Mutex<T> {
     /// }
     /// ```
     #[inline]
-    pub fn lock_owned(self: &Arc<Self>) -> MutexOwnedGuardFuture<T> {
-        MutexOwnedGuardFuture {
+    pub fn lock_owned(self: &Arc<Self>) -> UnorderedMutexOwnedGuardFuture<T> {
+        UnorderedMutexOwnedGuardFuture {
             mutex: self.clone(),
             is_realized: false,
         }
@@ -79,12 +82,12 @@ impl<T> Mutex<T> {
 /// The Simple Mutex Guard
 /// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally borrows the Mutex, so the mutex will not be dropped while a guard exists.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
-pub struct MutexGuard<'a, T: ?Sized> {
-    mutex: &'a Mutex<T>,
+pub struct UnorderedMutexGuard<'a, T: ?Sized> {
+    mutex: &'a UnorderedMutex<T>,
 }
 
-pub struct MutexGuardFuture<'a, T: ?Sized> {
-    mutex: &'a Mutex<T>,
+pub struct UnorderedMutexGuardFuture<'a, T: ?Sized> {
+    mutex: &'a UnorderedMutex<T>,
     is_realized: bool,
 }
 
@@ -92,31 +95,31 @@ pub struct MutexGuardFuture<'a, T: ?Sized> {
 /// This guard is only available from a Mutex that is wrapped in an `Arc`. It is identical to `MutexGuard`, except that rather than borrowing the `Mutex`, it clones the `Arc`, incrementing the reference count. This means that unlike `MutexGuard`, it will have the `'static` lifetime.
 /// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `Mutex`, so even if the lock goes away, the guard remains valid.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
-pub struct MutexOwnedGuard<T: ?Sized> {
-    mutex: Arc<Mutex<T>>,
+pub struct UnorderedMutexOwnedGuard<T: ?Sized> {
+    mutex: Arc<UnorderedMutex<T>>,
 }
 
-pub struct MutexOwnedGuardFuture<T: ?Sized> {
-    mutex: Arc<Mutex<T>>,
+pub struct UnorderedMutexOwnedGuardFuture<T: ?Sized> {
+    mutex: Arc<UnorderedMutex<T>>,
     is_realized: bool,
 }
 
-unsafe impl<T: ?Sized + Send> Send for Mutex<T> {}
-unsafe impl<T: ?Sized + Send> Sync for Mutex<T> {}
+unsafe impl<T: ?Sized + Send> Send for UnorderedMutex<T> {}
+unsafe impl<T: ?Sized + Send> Sync for UnorderedMutex<T> {}
 
-unsafe impl<T: ?Sized + Send> Send for MutexGuard<'_, T> {}
-unsafe impl<T: ?Sized + Send> Sync for MutexGuard<'_, T> {}
+unsafe impl<T: ?Sized + Send> Send for UnorderedMutexGuard<'_, T> {}
+unsafe impl<T: ?Sized + Send> Sync for UnorderedMutexGuard<'_, T> {}
 
-unsafe impl<T: ?Sized + Send> Send for MutexOwnedGuard<T> {}
-unsafe impl<T: ?Sized + Send> Sync for MutexOwnedGuard<T> {}
+unsafe impl<T: ?Sized + Send> Send for UnorderedMutexOwnedGuard<T> {}
+unsafe impl<T: ?Sized + Send> Sync for UnorderedMutexOwnedGuard<T> {}
 
-impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
-    type Output = MutexGuard<'a, T>;
+impl<'a, T: ?Sized> Future for UnorderedMutexGuardFuture<'a, T> {
+    type Output = UnorderedMutexGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.mutex.is_acquired.swap(true, Ordering::SeqCst) {
             self.is_realized = true;
-            Poll::Ready(MutexGuard { mutex: self.mutex })
+            Poll::Ready(UnorderedMutexGuard { mutex: self.mutex })
         } else {
             self.mutex
                 .waker
@@ -126,13 +129,13 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
     }
 }
 
-impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
-    type Output = MutexOwnedGuard<T>;
+impl<T: ?Sized> Future for UnorderedMutexOwnedGuardFuture<T> {
+    type Output = UnorderedMutexOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.mutex.is_acquired.swap(true, Ordering::SeqCst) {
             self.is_realized = true;
-            Poll::Ready(MutexOwnedGuard {
+            Poll::Ready(UnorderedMutexOwnedGuard {
                 mutex: self.mutex.clone(),
             })
         } else {
@@ -144,7 +147,7 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
     }
 }
 
-impl<T: ?Sized> Deref for MutexGuard<'_, T> {
+impl<T: ?Sized> Deref for UnorderedMutexGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -152,13 +155,13 @@ impl<T: ?Sized> Deref for MutexGuard<'_, T> {
     }
 }
 
-impl<T: ?Sized> DerefMut for MutexGuard<'_, T> {
+impl<T: ?Sized> DerefMut for UnorderedMutexGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.mutex.data.get() }
     }
 }
 
-impl<T: ?Sized> Deref for MutexOwnedGuard<T> {
+impl<T: ?Sized> Deref for UnorderedMutexOwnedGuard<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -166,13 +169,13 @@ impl<T: ?Sized> Deref for MutexOwnedGuard<T> {
     }
 }
 
-impl<T: ?Sized> DerefMut for MutexOwnedGuard<T> {
+impl<T: ?Sized> DerefMut for UnorderedMutexOwnedGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.mutex.data.get() }
     }
 }
 
-impl<T: ?Sized> Drop for MutexGuard<'_, T> {
+impl<T: ?Sized> Drop for UnorderedMutexGuard<'_, T> {
     fn drop(&mut self) {
         self.mutex.is_acquired.store(false, Ordering::SeqCst);
 
@@ -180,7 +183,7 @@ impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     }
 }
 
-impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
+impl<T: ?Sized> Drop for UnorderedMutexOwnedGuard<T> {
     fn drop(&mut self) {
         self.mutex.is_acquired.store(false, Ordering::SeqCst);
 
@@ -188,7 +191,7 @@ impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
     }
 }
 
-impl<T: ?Sized> Drop for MutexGuardFuture<'_, T> {
+impl<T: ?Sized> Drop for UnorderedMutexGuardFuture<'_, T> {
     fn drop(&mut self) {
         if !self.is_realized {
             self.mutex.is_acquired.store(false, Ordering::SeqCst);
@@ -198,7 +201,7 @@ impl<T: ?Sized> Drop for MutexGuardFuture<'_, T> {
     }
 }
 
-impl<T: ?Sized> Drop for MutexOwnedGuardFuture<T> {
+impl<T: ?Sized> Drop for UnorderedMutexOwnedGuardFuture<T> {
     fn drop(&mut self) {
         if !self.is_realized {
             self.mutex.is_acquired.store(false, Ordering::SeqCst);
@@ -217,7 +220,7 @@ fn wake_ptr(waker_ptr: &AtomicPtr<Waker>) {
     }
 }
 
-impl<T: Debug> Debug for Mutex<T> {
+impl<T: Debug> Debug for UnorderedMutex<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Mutex")
             .field("is_acquired", &self.is_acquired)
@@ -227,7 +230,7 @@ impl<T: Debug> Debug for Mutex<T> {
     }
 }
 
-impl<T: Debug> Debug for MutexGuardFuture<'_, T> {
+impl<T: Debug> Debug for UnorderedMutexGuardFuture<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MutexGuardFuture")
             .field("mutex", &self.mutex)
@@ -236,7 +239,7 @@ impl<T: Debug> Debug for MutexGuardFuture<'_, T> {
     }
 }
 
-impl<T: Debug> Debug for MutexGuard<'_, T> {
+impl<T: Debug> Debug for UnorderedMutexGuard<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MutexGuard")
             .field("mutex", &self.mutex)
@@ -244,7 +247,7 @@ impl<T: Debug> Debug for MutexGuard<'_, T> {
     }
 }
 
-impl<T: Debug> Debug for MutexOwnedGuardFuture<T> {
+impl<T: Debug> Debug for UnorderedMutexOwnedGuardFuture<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MutexOwnedGuardFuture")
             .field("mutex", &self.mutex)
@@ -253,7 +256,7 @@ impl<T: Debug> Debug for MutexOwnedGuardFuture<T> {
     }
 }
 
-impl<T: Debug> Debug for MutexOwnedGuard<T> {
+impl<T: Debug> Debug for UnorderedMutexOwnedGuard<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MutexOwnedGuard")
             .field("mutex", &self.mutex)
@@ -263,7 +266,7 @@ impl<T: Debug> Debug for MutexOwnedGuard<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::mutex_unordered::{Mutex, MutexGuard, MutexOwnedGuard};
+    use crate::mutex_unordered::{UnorderedMutex, UnorderedMutexGuard, UnorderedMutexOwnedGuard};
     use futures::{FutureExt, StreamExt, TryStreamExt};
     use std::ops::AddAssign;
     use std::sync::Arc;
@@ -271,11 +274,11 @@ mod tests {
 
     #[tokio::test(core_threads = 12)]
     async fn test_mutex() {
-        let c = Mutex::new(0);
+        let c = UnorderedMutex::new(0);
 
         futures::stream::iter(0..10000)
             .for_each_concurrent(None, |_| async {
-                let mut co: MutexGuard<i32> = c.lock().await;
+                let mut co: UnorderedMutexGuard<i32> = c.lock().await;
                 *co += 1;
             })
             .await;
@@ -287,7 +290,7 @@ mod tests {
     #[tokio::test(core_threads = 12)]
     async fn test_mutex_delay() {
         let expected_result = 100;
-        let c = Mutex::new(0);
+        let c = UnorderedMutex::new(0);
 
         futures::stream::iter(0..expected_result)
             .then(|i| c.lock().map(move |co| (i, co)))
@@ -303,11 +306,11 @@ mod tests {
 
     #[tokio::test(core_threads = 12)]
     async fn test_owned_mutex() {
-        let c = Arc::new(Mutex::new(0));
+        let c = Arc::new(UnorderedMutex::new(0));
 
         futures::stream::iter(0..10000)
             .for_each_concurrent(None, |_| async {
-                let mut co: MutexOwnedGuard<i32> = c.lock_owned().await;
+                let mut co: UnorderedMutexOwnedGuard<i32> = c.lock_owned().await;
                 *co += 1;
             })
             .await;
@@ -318,9 +321,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_container() {
-        let c = Mutex::new(String::from("lol"));
+        let c = UnorderedMutex::new(String::from("lol"));
 
-        let mut co: MutexGuard<String> = c.lock().await;
+        let mut co: UnorderedMutexGuard<String> = c.lock().await;
         co.add_assign("lol");
 
         assert_eq!(*co, "lollol");
@@ -328,9 +331,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_timeout() {
-        let c = Mutex::new(String::from("lol"));
+        let c = UnorderedMutex::new(String::from("lol"));
 
-        let co: MutexGuard<String> = c.lock().await;
+        let co: UnorderedMutexGuard<String> = c.lock().await;
 
         futures::stream::iter(0..10000i32)
             .then(|_| tokio::time::timeout(Duration::from_nanos(1), c.lock()))
@@ -340,7 +343,7 @@ mod tests {
 
         drop(co);
 
-        let mut co: MutexGuard<String> = c.lock().await;
+        let mut co: UnorderedMutexGuard<String> = c.lock().await;
         co.add_assign("lol");
 
         assert_eq!(*co, "lollol");
