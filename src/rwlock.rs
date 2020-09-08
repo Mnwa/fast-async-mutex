@@ -43,7 +43,7 @@ impl<T> RwLock<T> {
     /// #[tokio::main]
     /// async fn main() {
     ///     let mutex = RwLock::new(10);
-    ///     let guard = mutex.write().await;
+    ///     let mut guard = mutex.write().await;
     ///     *guard += 1;
     ///     assert_eq!(*guard, 11);
     /// }
@@ -70,7 +70,7 @@ impl<T> RwLock<T> {
     /// #[tokio::main]
     /// async fn main() {
     ///     let mutex = Arc::new(RwLock::new(10));
-    ///     let guard = mutex.write_owned().await;
+    ///     let mut guard = mutex.write_owned().await;
     ///     *guard += 1;
     ///     assert_eq!(*guard, 11);
     /// }
