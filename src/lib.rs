@@ -1,6 +1,6 @@
-/// `fast_async_mutex` it is a lib which provide asynchronous locking mechanisms, which used spinlock algorithm.
-/// It's maybe very efficient because when mutex tries to acquire data unsuccessfully, these returning control to an async runtime back.
-/// This lib built only on atomics and don't use others std synchronous data structures, which make this lib so fast.
+//! `fast_async_mutex` it is a lib which provide asynchronous locking mechanisms, which used spinlock algorithm.
+//! It's maybe very efficient because when mutex tries to acquire data unsuccessfully, these returning control to an async runtime back.
+//! This lib built only on atomics and don't use others std synchronous data structures, which make this lib so fast.
 
 /// The fast async mutex which uses spinlock algorithm with using waker
 pub mod mutex;
