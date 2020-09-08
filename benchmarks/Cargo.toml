@@ -10,4 +10,4 @@ edition = "2018"
 smol = "0.4"
 futures = "0.3"
 tokio = { version = "0.2", features = ["rt-threaded", "macros", "time", "sync"] }
-fast-async-mutex = { version = "0.4", path = "../" }
+fast-async-mutex = { version = "0.5", path = "../" }
