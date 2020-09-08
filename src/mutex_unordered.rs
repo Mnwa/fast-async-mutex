@@ -105,14 +105,10 @@ pub struct UnorderedMutexOwnedGuardFuture<T: ?Sized> {
     is_realized: bool,
 }
 
-unsafe impl<T: ?Sized + Send> Send for UnorderedMutex<T> {}
-unsafe impl<T: ?Sized + Send> Sync for UnorderedMutex<T> {}
-
-unsafe impl<T: ?Sized + Send> Send for UnorderedMutexGuard<'_, T> {}
-unsafe impl<T: ?Sized + Send> Sync for UnorderedMutexGuard<'_, T> {}
-
-unsafe impl<T: ?Sized + Send> Send for UnorderedMutexOwnedGuard<T> {}
-unsafe impl<T: ?Sized + Send> Sync for UnorderedMutexOwnedGuard<T> {}
+unsafe impl<T> Send for UnorderedMutex<T> where T: ?Sized + Send {}
+unsafe impl<T> Sync for UnorderedMutex<T> where T: ?Sized + Send {}
+unsafe impl<T> Sync for UnorderedMutexGuard<'_, T> where T: ?Sized + Send + Sync {}
+unsafe impl<T> Sync for UnorderedMutexOwnedGuard<T> where T: ?Sized + Send + Sync {}
 
 impl<'a, T: ?Sized> Future for UnorderedMutexGuardFuture<'a, T> {
     type Output = UnorderedMutexGuard<'a, T>;

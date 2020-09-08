@@ -108,14 +108,10 @@ pub struct MutexOwnedGuardFuture<T: ?Sized> {
     is_realized: bool,
 }
 
-unsafe impl<T: ?Sized + Send> Send for Mutex<T> {}
-unsafe impl<T: ?Sized + Send> Sync for Mutex<T> {}
-
-unsafe impl<T: ?Sized + Send> Send for MutexGuard<'_, T> {}
-unsafe impl<T: ?Sized + Send> Sync for MutexGuard<'_, T> {}
-
-unsafe impl<T: ?Sized + Send> Send for MutexOwnedGuard<T> {}
-unsafe impl<T: ?Sized + Send> Sync for MutexOwnedGuard<T> {}
+unsafe impl<T> Send for Mutex<T> where T: ?Sized + Send {}
+unsafe impl<T> Sync for Mutex<T> where T: ?Sized + Send {}
+unsafe impl<T> Sync for MutexGuard<'_, T> where T: ?Sized + Send + Sync {}
+unsafe impl<T> Sync for MutexOwnedGuard<T> where T: ?Sized + Send + Sync {}
 
 impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
     type Output = MutexGuard<'a, T>;
