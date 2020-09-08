@@ -4,11 +4,9 @@
 [![](https://img.shields.io/crates/v/fast-async-mutex.svg)](https://crates.io/crates/fast-async-mutex)
 [![](https://img.shields.io/crates/d/fast-async-mutex.svg)](https://crates.io/crates/fast-async-mutex)
 
-The fast async mutex which uses atomics with spinlock algorithm. 
-Spinlock algorithm integrated with the Rust futures concept without the overhead of any libs. Also when the `MutexGuard` is dropped,
-a waker of the next locker will be executed.
-It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
-
+It is a lib which provide asynchronous locking mechanisms, which used spinlock algorithm.
+It's maybe very efficient because when mutex tries to acquire data unsuccessfully, these returning control to an async runtime back.
+This lib built only on atomics and don't use others std synchronous data structures, which make this lib so fast.
 
 ## Examples
 
