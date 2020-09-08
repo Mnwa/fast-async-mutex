@@ -46,7 +46,7 @@ impl<T> UnorderedMutex<T> {
     /// }
     /// ```
     #[inline]
-    pub fn lock(&self) -> UnorderedMutexGuardFuture<T> {
+    pub const fn lock(&self) -> UnorderedMutexGuardFuture<T> {
         UnorderedMutexGuardFuture {
             mutex: &self,
             is_realized: false,
