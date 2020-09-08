@@ -117,7 +117,7 @@ impl<'a, T: ?Sized> Future for UnorderedMutexGuardFuture<'a, T> {
     type Output = UnorderedMutexGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.mutex.is_acquired.swap(true, Ordering::SeqCst) {
+        if !self.mutex.is_acquired.swap(true, Ordering::AcqRel) {
             self.is_realized = true;
             Poll::Ready(UnorderedMutexGuard { mutex: self.mutex })
         } else {
@@ -133,7 +133,7 @@ impl<T: ?Sized> Future for UnorderedMutexOwnedGuardFuture<T> {
     type Output = UnorderedMutexOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.mutex.is_acquired.swap(true, Ordering::SeqCst) {
+        if !self.mutex.is_acquired.swap(true, Ordering::AcqRel) {
             self.is_realized = true;
             Poll::Ready(UnorderedMutexOwnedGuard {
                 mutex: self.mutex.clone(),
@@ -177,7 +177,7 @@ impl<T: ?Sized> DerefMut for UnorderedMutexOwnedGuard<T> {
 
 impl<T: ?Sized> Drop for UnorderedMutexGuard<'_, T> {
     fn drop(&mut self) {
-        self.mutex.is_acquired.store(false, Ordering::SeqCst);
+        self.mutex.is_acquired.store(false, Ordering::Release);
 
         wake_ptr(&self.mutex.waker)
     }
@@ -185,7 +185,7 @@ impl<T: ?Sized> Drop for UnorderedMutexGuard<'_, T> {
 
 impl<T: ?Sized> Drop for UnorderedMutexOwnedGuard<T> {
     fn drop(&mut self) {
-        self.mutex.is_acquired.store(false, Ordering::SeqCst);
+        self.mutex.is_acquired.store(false, Ordering::Release);
 
         wake_ptr(&self.mutex.waker)
     }
