@@ -36,11 +36,11 @@ impl<T> UnorderedMutex<T> {
     /// # Examples
     ///
     /// ```
-    /// use fast_async_mutex::mutex::Mutex;
+    /// use fast_async_mutex::mutex_unordered::UnorderedMutex;
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mutex = Mutex::new(10);
+    ///     let mutex = UnorderedMutex::new(10);
     ///     let guard = mutex.lock().await;
     ///     assert_eq!(*guard, 10);
     /// }
@@ -61,11 +61,11 @@ impl<T> UnorderedMutex<T> {
     /// # Examples
     ///
     /// ```
-    /// use fast_async_mutex::mutex::Mutex;
+    /// use fast_async_mutex::mutex_unordered::UnorderedMutex;
     /// use std::sync::Arc;
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mutex = Arc::new(Mutex::new(10));
+    ///     let mutex = Arc::new(UnorderedMutex::new(10));
     ///     let guard = mutex.lock_owned().await;
     ///     assert_eq!(*guard, 10);
     /// }
