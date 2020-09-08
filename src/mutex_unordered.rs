@@ -20,6 +20,7 @@ pub struct UnorderedMutex<T: ?Sized> {
 }
 
 impl<T> UnorderedMutex<T> {
+    /// Create a new `UnorderedMutex`
     #[inline]
     pub const fn new(data: T) -> UnorderedMutex<T> {
         UnorderedMutex {
@@ -56,7 +57,7 @@ impl<T> UnorderedMutex<T> {
     /// Acquires the mutex.
     ///
     /// Returns a guard that releases the mutex and wake the next locker when dropped.
-    /// `MutexOwnedGuard` have a `'static` lifetime, but requires the `Arc<Mutex<T>>` type
+    /// `UnorderedMutexOwnedGuardFuture` have a `'static` lifetime, but requires the `Arc<Mutex<T>>` type
     ///
     /// # Examples
     ///
@@ -92,7 +93,7 @@ pub struct UnorderedMutexGuardFuture<'a, T: ?Sized> {
 }
 
 /// An owned handle to a held Mutex.
-/// This guard is only available from a Mutex that is wrapped in an `Arc`. It is identical to `MutexGuard`, except that rather than borrowing the `Mutex`, it clones the `Arc`, incrementing the reference count. This means that unlike `MutexGuard`, it will have the `'static` lifetime.
+/// This guard is only available from a Mutex that is wrapped in an `Arc`. It is identical to `UnorderedMutexGuard`, except that rather than borrowing the `Mutex`, it clones the `Arc`, incrementing the reference count. This means that unlike `UnorderedMutexGuard`, it will have the `'static` lifetime.
 /// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `Mutex`, so even if the lock goes away, the guard remains valid.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
 pub struct UnorderedMutexOwnedGuard<T: ?Sized> {
@@ -222,7 +223,7 @@ fn wake_ptr(waker_ptr: &AtomicPtr<Waker>) {
 
 impl<T: Debug> Debug for UnorderedMutex<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Mutex")
+        f.debug_struct("UnorderedMutex")
             .field("is_acquired", &self.is_acquired)
             .field("waker", &self.waker)
             .field("data", &self.data)
@@ -232,7 +233,7 @@ impl<T: Debug> Debug for UnorderedMutex<T> {
 
 impl<T: Debug> Debug for UnorderedMutexGuardFuture<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexGuardFuture")
+        f.debug_struct("UnorderedMutexGuardFuture")
             .field("mutex", &self.mutex)
             .field("is_realized", &self.is_realized)
             .finish()
@@ -241,7 +242,7 @@ impl<T: Debug> Debug for UnorderedMutexGuardFuture<'_, T> {
 
 impl<T: Debug> Debug for UnorderedMutexGuard<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexGuard")
+        f.debug_struct("UnorderedMutexGuard")
             .field("mutex", &self.mutex)
             .finish()
     }
@@ -249,7 +250,7 @@ impl<T: Debug> Debug for UnorderedMutexGuard<'_, T> {
 
 impl<T: Debug> Debug for UnorderedMutexOwnedGuardFuture<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexOwnedGuardFuture")
+        f.debug_struct("UnorderedMutexOwnedGuardFuture")
             .field("mutex", &self.mutex)
             .field("is_realized", &self.is_realized)
             .finish()
@@ -258,7 +259,7 @@ impl<T: Debug> Debug for UnorderedMutexOwnedGuardFuture<T> {
 
 impl<T: Debug> Debug for UnorderedMutexOwnedGuard<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexOwnedGuard")
+        f.debug_struct("UnorderedMutexOwnedGuard")
             .field("mutex", &self.mutex)
             .finish()
     }

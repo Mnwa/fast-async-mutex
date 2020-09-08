@@ -18,6 +18,7 @@ pub struct Mutex<T: ?Sized> {
 }
 
 impl<T> Mutex<T> {
+    /// Create a new `Mutex`
     #[inline]
     pub const fn new(data: T) -> Mutex<T> {
         Mutex {

@@ -19,6 +19,7 @@ pub struct RwLock<T: ?Sized> {
 }
 
 impl<T> RwLock<T> {
+    /// Create a new `UnorderedMutex`
     #[inline]
     pub const fn new(data: T) -> RwLock<T> {
         RwLock {
@@ -30,6 +31,23 @@ impl<T> RwLock<T> {
         }
     }
 
+    /// Acquires the mutex for are write.
+    ///
+    /// Returns a guard that releases the mutex and wake the next locker when it will be dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fast_async_mutex::rwlock::RwLock;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mutex = RwLock::new(10);
+    ///     let guard = mutex.write().await;
+    ///     *guard += 1;
+    ///     assert_eq!(*guard, 11);
+    /// }
+    /// ```
     #[inline]
     pub fn write(&self) -> WriteLockGuardFuture<T> {
         WriteLockGuardFuture {
@@ -39,6 +57,24 @@ impl<T> RwLock<T> {
         }
     }
 
+    /// Acquires the mutex for are write.
+    ///
+    /// Returns a guard that releases the mutex and wake the next locker when it will be dropped.
+    /// `WriteLockOwnedGuard` have a `'static` lifetime, but requires the `Arc<Mutex<T>>` type
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fast_async_mutex::rwlock::RwLock;
+    /// use std::sync::Arc;
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mutex = Arc::new(RwLock::new(10));
+    ///     let guard = mutex.write_owned().await;
+    ///     *guard += 1;
+    ///     assert_eq!(*guard, 11);
+    /// }
+    /// ```
     #[inline]
     pub fn write_owned(self: &Arc<Self>) -> WriteLockOwnedGuardFuture<T> {
         WriteLockOwnedGuardFuture {
@@ -48,6 +84,23 @@ impl<T> RwLock<T> {
         }
     }
 
+    /// Acquires the mutex for are read.
+    ///
+    /// Returns a guard that releases the mutex and wake the next locker when it will be dropped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fast_async_mutex::rwlock::RwLock;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mutex = RwLock::new(10);
+    ///     let guard = mutex.read().await;
+    ///     let guard2 = mutex.read().await;
+    ///     assert_eq!(*guard, *guard2);
+    /// }
+    /// ```
     #[inline]
     pub fn read(&self) -> ReadLockGuardFuture<T> {
         ReadLockGuardFuture {
@@ -57,6 +110,24 @@ impl<T> RwLock<T> {
         }
     }
 
+    /// Acquires the mutex for are write.
+    ///
+    /// Returns a guard that releases the mutex and wake the next locker when it will be dropped.
+    /// `WriteLockOwnedGuard` have a `'static` lifetime, but requires the `Arc<Mutex<T>>` type
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use fast_async_mutex::rwlock::RwLock;
+    /// use std::sync::Arc;
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let mutex = Arc::new(RwLock::new(10));
+    ///     let guard = mutex.read().await;
+    ///     let guard2 = mutex.read().await;
+    ///     assert_eq!(*guard, *guard2);
+    /// }
+    /// ```
     #[inline]
     pub fn read_owned(self: &Arc<Self>) -> ReadLockOwnedGuardFuture<T> {
         ReadLockOwnedGuardFuture {
@@ -67,6 +138,9 @@ impl<T> RwLock<T> {
     }
 }
 
+/// The Simple Write Lock Guard
+/// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally borrows the Mutex, so the mutex will not be dropped while a guard exists.
+/// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
 pub struct WriteLockGuard<'a, T: ?Sized> {
     mutex: &'a RwLock<T>,
 }
@@ -77,6 +151,10 @@ pub struct WriteLockGuardFuture<'a, T: ?Sized> {
     is_realized: bool,
 }
 
+/// An owned handle to a held Mutex.
+/// This guard is only available from a Mutex that is wrapped in an `Arc`. It is identical to `WriteLockGuard`, except that rather than borrowing the `Mutex`, it clones the `Arc`, incrementing the reference count. This means that unlike `WriteLockGuard`, it will have the `'static` lifetime.
+/// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `Mutex`, so even if the lock goes away, the guard remains valid.
+/// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
 pub struct WriteLockOwnedGuard<T: ?Sized> {
     mutex: Arc<RwLock<T>>,
 }
@@ -337,18 +415,19 @@ fn wake_ptr(waker_ptr: &AtomicPtr<Waker>) {
 
 impl<T: Debug> Debug for RwLock<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Mutex")
+        f.debug_struct("RwLock")
             .field("state", &self.state)
             .field("current", &self.current)
             .field("waker", &self.waker)
             .field("data", &self.data)
+            .field("readers", &self.readers)
             .finish()
     }
 }
 
 impl<T: Debug> Debug for WriteLockGuardFuture<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexGuardFuture")
+        f.debug_struct("WriteLockGuardFuture")
             .field("mutex", &self.mutex)
             .field("id", &self.id)
             .field("is_realized", &self.is_realized)
@@ -358,7 +437,7 @@ impl<T: Debug> Debug for WriteLockGuardFuture<'_, T> {
 
 impl<T: Debug> Debug for WriteLockGuard<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexGuard")
+        f.debug_struct("WriteLockGuard")
             .field("mutex", &self.mutex)
             .finish()
     }
@@ -366,7 +445,7 @@ impl<T: Debug> Debug for WriteLockGuard<'_, T> {
 
 impl<T: Debug> Debug for WriteLockOwnedGuardFuture<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexOwnedGuardFuture")
+        f.debug_struct("WriteLockOwnedGuardFuture")
             .field("mutex", &self.mutex)
             .field("id", &self.id)
             .field("is_realized", &self.is_realized)
@@ -376,7 +455,43 @@ impl<T: Debug> Debug for WriteLockOwnedGuardFuture<T> {
 
 impl<T: Debug> Debug for WriteLockOwnedGuard<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexOwnedGuard")
+        f.debug_struct("WriteLockOwnedGuard")
+            .field("mutex", &self.mutex)
+            .finish()
+    }
+}
+
+impl<T: Debug> Debug for ReadLockGuardFuture<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReadLockGuardFuture")
+            .field("mutex", &self.mutex)
+            .field("id", &self.id)
+            .field("is_realized", &self.is_realized)
+            .finish()
+    }
+}
+
+impl<T: Debug> Debug for ReadLockGuard<'_, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReadLockGuard")
+            .field("mutex", &self.mutex)
+            .finish()
+    }
+}
+
+impl<T: Debug> Debug for ReadLockOwnedGuardFuture<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReadLockOwnedGuardFuture")
+            .field("mutex", &self.mutex)
+            .field("id", &self.id)
+            .field("is_realized", &self.is_realized)
+            .finish()
+    }
+}
+
+impl<T: Debug> Debug for ReadLockOwnedGuard<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReadLockOwnedGuard")
             .field("mutex", &self.mutex)
             .finish()
     }
