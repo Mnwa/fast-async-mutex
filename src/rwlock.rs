@@ -19,7 +19,7 @@ pub struct RwLock<T: ?Sized> {
 }
 
 impl<T> RwLock<T> {
-    /// Create a new `UnorderedMutex`
+    /// Create a new `UnorderedRWLock`
     #[inline]
     pub const fn new(data: T) -> RwLock<T> {
         RwLock {
@@ -49,8 +49,8 @@ impl<T> RwLock<T> {
     /// }
     /// ```
     #[inline]
-    pub fn write(&self) -> WriteLockGuardFuture<T> {
-        WriteLockGuardFuture {
+    pub fn write(&self) -> RwLockWriteGuardFuture<T> {
+        RwLockWriteGuardFuture {
             mutex: &self,
             id: self.state.fetch_add(1, Ordering::AcqRel),
             is_realized: false,
@@ -60,7 +60,7 @@ impl<T> RwLock<T> {
     /// Acquires the mutex for are write.
     ///
     /// Returns a guard that releases the mutex and wake the next locker when it will be dropped.
-    /// `WriteLockOwnedGuard` have a `'static` lifetime, but requires the `Arc<Mutex<T>>` type
+    /// `WriteLockOwnedGuard` have a `'static` lifetime, but requires the `Arc<RWLock<T>>` type
     ///
     /// # Examples
     ///
@@ -76,8 +76,8 @@ impl<T> RwLock<T> {
     /// }
     /// ```
     #[inline]
-    pub fn write_owned(self: &Arc<Self>) -> WriteLockOwnedGuardFuture<T> {
-        WriteLockOwnedGuardFuture {
+    pub fn write_owned(self: &Arc<Self>) -> RwLockWriteOwnedGuardFuture<T> {
+        RwLockWriteOwnedGuardFuture {
             mutex: self.clone(),
             id: self.state.fetch_add(1, Ordering::AcqRel),
             is_realized: false,
@@ -102,8 +102,8 @@ impl<T> RwLock<T> {
     /// }
     /// ```
     #[inline]
-    pub fn read(&self) -> ReadLockGuardFuture<T> {
-        ReadLockGuardFuture {
+    pub fn read(&self) -> RwLockReadGuardFuture<T> {
+        RwLockReadGuardFuture {
             mutex: &self,
             id: self.state.fetch_add(1, Ordering::AcqRel),
             is_realized: false,
@@ -113,7 +113,7 @@ impl<T> RwLock<T> {
     /// Acquires the mutex for are write.
     ///
     /// Returns a guard that releases the mutex and wake the next locker when it will be dropped.
-    /// `WriteLockOwnedGuard` have a `'static` lifetime, but requires the `Arc<Mutex<T>>` type
+    /// `WriteLockOwnedGuard` have a `'static` lifetime, but requires the `Arc<RWLock<T>>` type
     ///
     /// # Examples
     ///
@@ -129,8 +129,8 @@ impl<T> RwLock<T> {
     /// }
     /// ```
     #[inline]
-    pub fn read_owned(self: &Arc<Self>) -> ReadLockOwnedGuardFuture<T> {
-        ReadLockOwnedGuardFuture {
+    pub fn read_owned(self: &Arc<Self>) -> RwLockReadOwnedGuardFuture<T> {
+        RwLockReadOwnedGuardFuture {
             mutex: self.clone(),
             id: self.state.fetch_add(1, Ordering::AcqRel),
             is_realized: false,
@@ -139,47 +139,54 @@ impl<T> RwLock<T> {
 }
 
 /// The Simple Write Lock Guard
-/// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally borrows the Mutex, so the mutex will not be dropped while a guard exists.
+/// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally borrows the RWLock, so the mutex will not be dropped while a guard exists.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
-pub struct WriteLockGuard<'a, T: ?Sized> {
+pub struct RwLockWriteGuard<'a, T: ?Sized> {
     mutex: &'a RwLock<T>,
 }
 
-pub struct WriteLockGuardFuture<'a, T: ?Sized> {
+pub struct RwLockWriteGuardFuture<'a, T: ?Sized> {
     mutex: &'a RwLock<T>,
     id: usize,
     is_realized: bool,
 }
 
-/// An owned handle to a held Mutex.
-/// This guard is only available from a Mutex that is wrapped in an `Arc`. It is identical to `WriteLockGuard`, except that rather than borrowing the `Mutex`, it clones the `Arc`, incrementing the reference count. This means that unlike `WriteLockGuard`, it will have the `'static` lifetime.
-/// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `Mutex`, so even if the lock goes away, the guard remains valid.
+/// An owned handle to a held RWLock.
+/// This guard is only available from a RWLock that is wrapped in an `Arc`. It is identical to `WriteLockGuard`, except that rather than borrowing the `RWLock`, it clones the `Arc`, incrementing the reference count. This means that unlike `WriteLockGuard`, it will have the `'static` lifetime.
+/// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `RWLock`, so even if the lock goes away, the guard remains valid.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
-pub struct WriteLockOwnedGuard<T: ?Sized> {
+pub struct RwLockWriteOwnedGuard<T: ?Sized> {
     mutex: Arc<RwLock<T>>,
 }
 
-pub struct WriteLockOwnedGuardFuture<T: ?Sized> {
+pub struct RwLockWriteOwnedGuardFuture<T: ?Sized> {
     mutex: Arc<RwLock<T>>,
     id: usize,
     is_realized: bool,
 }
 
-pub struct ReadLockGuard<'a, T: ?Sized> {
+/// The Simple Write Lock Guard
+/// As long as you have this guard, you have shared access to the underlying `T`. The guard internally borrows the `RWLock`, so the mutex will not be dropped while a guard exists.
+/// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+pub struct RwLockReadGuard<'a, T: ?Sized> {
     mutex: &'a RwLock<T>,
 }
 
-pub struct ReadLockGuardFuture<'a, T: ?Sized> {
+pub struct RwLockReadGuardFuture<'a, T: ?Sized> {
     mutex: &'a RwLock<T>,
     id: usize,
     is_realized: bool,
 }
 
-pub struct ReadLockOwnedGuard<T: ?Sized> {
+/// An owned handle to a held RWLock.
+/// This guard is only available from a RWLock that is wrapped in an `Arc`. It is identical to `WriteLockGuard`, except that rather than borrowing the `RWLock`, it clones the `Arc`, incrementing the reference count. This means that unlike `WriteLockGuard`, it will have the `'static` lifetime.
+/// As long as you have this guard, you have shared access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `RWLock`, so even if the lock goes away, the guard remains valid.
+/// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+pub struct RwLockReadOwnedGuard<T: ?Sized> {
     mutex: Arc<RwLock<T>>,
 }
 
-pub struct ReadLockOwnedGuardFuture<T: ?Sized> {
+pub struct RwLockReadOwnedGuardFuture<T: ?Sized> {
     mutex: Arc<RwLock<T>>,
     id: usize,
     is_realized: bool,
@@ -188,27 +195,27 @@ pub struct ReadLockOwnedGuardFuture<T: ?Sized> {
 unsafe impl<T: ?Sized + Send> Send for RwLock<T> {}
 unsafe impl<T: ?Sized + Send> Sync for RwLock<T> {}
 
-unsafe impl<T: ?Sized + Send> Send for WriteLockGuard<'_, T> {}
-unsafe impl<T: ?Sized + Send> Sync for WriteLockGuard<'_, T> {}
+unsafe impl<T: ?Sized + Send> Send for RwLockWriteGuard<'_, T> {}
+unsafe impl<T: ?Sized + Send> Sync for RwLockWriteGuard<'_, T> {}
 
-unsafe impl<T: ?Sized + Send> Send for WriteLockOwnedGuard<T> {}
-unsafe impl<T: ?Sized + Send> Sync for WriteLockOwnedGuard<T> {}
+unsafe impl<T: ?Sized + Send> Send for RwLockWriteOwnedGuard<T> {}
+unsafe impl<T: ?Sized + Send> Sync for RwLockWriteOwnedGuard<T> {}
 
-unsafe impl<T: ?Sized + Send> Send for ReadLockGuard<'_, T> {}
-unsafe impl<T: ?Sized + Send> Sync for ReadLockGuard<'_, T> {}
+unsafe impl<T: ?Sized + Send> Send for RwLockReadGuard<'_, T> {}
+unsafe impl<T: ?Sized + Send> Sync for RwLockReadGuard<'_, T> {}
 
-unsafe impl<T: ?Sized + Send> Send for ReadLockOwnedGuard<T> {}
-unsafe impl<T: ?Sized + Send> Sync for ReadLockOwnedGuard<T> {}
+unsafe impl<T: ?Sized + Send> Send for RwLockReadOwnedGuard<T> {}
+unsafe impl<T: ?Sized + Send> Sync for RwLockReadOwnedGuard<T> {}
 
-impl<'a, T: ?Sized> Future for WriteLockGuardFuture<'a, T> {
-    type Output = WriteLockGuard<'a, T>;
+impl<'a, T: ?Sized> Future for RwLockWriteGuardFuture<'a, T> {
+    type Output = RwLockWriteGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let current = self.mutex.current.load(Ordering::Acquire);
 
         if current == self.id {
             self.is_realized = true;
-            Poll::Ready(WriteLockGuard { mutex: self.mutex })
+            Poll::Ready(RwLockWriteGuard { mutex: self.mutex })
         } else {
             if Some(current) == self.id.checked_sub(1) {
                 self.mutex
@@ -220,14 +227,14 @@ impl<'a, T: ?Sized> Future for WriteLockGuardFuture<'a, T> {
     }
 }
 
-impl<T: ?Sized> Future for WriteLockOwnedGuardFuture<T> {
-    type Output = WriteLockOwnedGuard<T>;
+impl<T: ?Sized> Future for RwLockWriteOwnedGuardFuture<T> {
+    type Output = RwLockWriteOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let current = self.mutex.current.load(Ordering::Acquire);
         if current == self.id {
             self.is_realized = true;
-            Poll::Ready(WriteLockOwnedGuard {
+            Poll::Ready(RwLockWriteOwnedGuard {
                 mutex: self.mutex.clone(),
             })
         } else {
@@ -242,7 +249,7 @@ impl<T: ?Sized> Future for WriteLockOwnedGuardFuture<T> {
     }
 }
 
-impl<T: ?Sized> Deref for WriteLockGuard<'_, T> {
+impl<T: ?Sized> Deref for RwLockWriteGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -250,13 +257,13 @@ impl<T: ?Sized> Deref for WriteLockGuard<'_, T> {
     }
 }
 
-impl<T: ?Sized> DerefMut for WriteLockGuard<'_, T> {
+impl<T: ?Sized> DerefMut for RwLockWriteGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.mutex.data.get() }
     }
 }
 
-impl<T: ?Sized> Deref for WriteLockOwnedGuard<T> {
+impl<T: ?Sized> Deref for RwLockWriteOwnedGuard<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -264,13 +271,13 @@ impl<T: ?Sized> Deref for WriteLockOwnedGuard<T> {
     }
 }
 
-impl<T: ?Sized> DerefMut for WriteLockOwnedGuard<T> {
+impl<T: ?Sized> DerefMut for RwLockWriteOwnedGuard<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.mutex.data.get() }
     }
 }
 
-impl<T: ?Sized> Drop for WriteLockGuard<'_, T> {
+impl<T: ?Sized> Drop for RwLockWriteGuard<'_, T> {
     fn drop(&mut self) {
         self.mutex.current.fetch_add(1, Ordering::AcqRel);
 
@@ -278,7 +285,7 @@ impl<T: ?Sized> Drop for WriteLockGuard<'_, T> {
     }
 }
 
-impl<T: ?Sized> Drop for WriteLockOwnedGuard<T> {
+impl<T: ?Sized> Drop for RwLockWriteOwnedGuard<T> {
     fn drop(&mut self) {
         self.mutex.current.fetch_add(1, Ordering::AcqRel);
 
@@ -286,7 +293,7 @@ impl<T: ?Sized> Drop for WriteLockOwnedGuard<T> {
     }
 }
 
-impl<T: ?Sized> Drop for WriteLockGuardFuture<'_, T> {
+impl<T: ?Sized> Drop for RwLockWriteGuardFuture<'_, T> {
     fn drop(&mut self) {
         if !self.is_realized {
             self.mutex.current.fetch_add(1, Ordering::AcqRel);
@@ -296,7 +303,7 @@ impl<T: ?Sized> Drop for WriteLockGuardFuture<'_, T> {
     }
 }
 
-impl<T: ?Sized> Drop for WriteLockOwnedGuardFuture<T> {
+impl<T: ?Sized> Drop for RwLockWriteOwnedGuardFuture<T> {
     fn drop(&mut self) {
         if !self.is_realized {
             self.mutex.current.fetch_add(1, Ordering::AcqRel);
@@ -305,8 +312,8 @@ impl<T: ?Sized> Drop for WriteLockOwnedGuardFuture<T> {
         }
     }
 }
-impl<'a, T: ?Sized> Future for ReadLockGuardFuture<'a, T> {
-    type Output = ReadLockGuard<'a, T>;
+impl<'a, T: ?Sized> Future for RwLockReadGuardFuture<'a, T> {
+    type Output = RwLockReadGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let current = self.mutex.current.load(Ordering::Acquire);
@@ -314,7 +321,7 @@ impl<'a, T: ?Sized> Future for ReadLockGuardFuture<'a, T> {
         if current + readers == self.id {
             self.is_realized = true;
             self.mutex.readers.fetch_add(1, Ordering::Release);
-            Poll::Ready(ReadLockGuard { mutex: self.mutex })
+            Poll::Ready(RwLockReadGuard { mutex: self.mutex })
         } else {
             if Some(current + readers) == self.id.checked_sub(1) {
                 self.mutex
@@ -326,8 +333,8 @@ impl<'a, T: ?Sized> Future for ReadLockGuardFuture<'a, T> {
     }
 }
 
-impl<T: ?Sized> Future for ReadLockOwnedGuardFuture<T> {
-    type Output = ReadLockOwnedGuard<T>;
+impl<T: ?Sized> Future for RwLockReadOwnedGuardFuture<T> {
+    type Output = RwLockReadOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let current = self.mutex.current.load(Ordering::Acquire);
@@ -335,7 +342,7 @@ impl<T: ?Sized> Future for ReadLockOwnedGuardFuture<T> {
         if current + readers == self.id {
             self.is_realized = true;
             self.mutex.readers.fetch_add(1, Ordering::Release);
-            Poll::Ready(ReadLockOwnedGuard {
+            Poll::Ready(RwLockReadOwnedGuard {
                 mutex: self.mutex.clone(),
             })
         } else {
@@ -350,7 +357,7 @@ impl<T: ?Sized> Future for ReadLockOwnedGuardFuture<T> {
     }
 }
 
-impl<T: ?Sized> Deref for ReadLockGuard<'_, T> {
+impl<T: ?Sized> Deref for RwLockReadGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -358,7 +365,7 @@ impl<T: ?Sized> Deref for ReadLockGuard<'_, T> {
     }
 }
 
-impl<T: ?Sized> Deref for ReadLockOwnedGuard<T> {
+impl<T: ?Sized> Deref for RwLockReadOwnedGuard<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -366,7 +373,7 @@ impl<T: ?Sized> Deref for ReadLockOwnedGuard<T> {
     }
 }
 
-impl<T: ?Sized> Drop for ReadLockGuard<'_, T> {
+impl<T: ?Sized> Drop for RwLockReadGuard<'_, T> {
     fn drop(&mut self) {
         self.mutex.current.fetch_add(1, Ordering::AcqRel);
         self.mutex.readers.fetch_sub(1, Ordering::Release);
@@ -375,7 +382,7 @@ impl<T: ?Sized> Drop for ReadLockGuard<'_, T> {
     }
 }
 
-impl<T: ?Sized> Drop for ReadLockOwnedGuard<T> {
+impl<T: ?Sized> Drop for RwLockReadOwnedGuard<T> {
     fn drop(&mut self) {
         self.mutex.current.fetch_add(1, Ordering::AcqRel);
         self.mutex.readers.fetch_sub(1, Ordering::Release);
@@ -384,7 +391,7 @@ impl<T: ?Sized> Drop for ReadLockOwnedGuard<T> {
     }
 }
 
-impl<T: ?Sized> Drop for ReadLockGuardFuture<'_, T> {
+impl<T: ?Sized> Drop for RwLockReadGuardFuture<'_, T> {
     fn drop(&mut self) {
         if !self.is_realized {
             self.mutex.current.fetch_add(1, Ordering::AcqRel);
@@ -394,7 +401,7 @@ impl<T: ?Sized> Drop for ReadLockGuardFuture<'_, T> {
     }
 }
 
-impl<T: ?Sized> Drop for ReadLockOwnedGuardFuture<T> {
+impl<T: ?Sized> Drop for RwLockReadOwnedGuardFuture<T> {
     fn drop(&mut self) {
         if !self.is_realized {
             self.mutex.current.fetch_add(1, Ordering::AcqRel);
@@ -425,9 +432,9 @@ impl<T: Debug> Debug for RwLock<T> {
     }
 }
 
-impl<T: Debug> Debug for WriteLockGuardFuture<'_, T> {
+impl<T: Debug> Debug for RwLockWriteGuardFuture<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("WriteLockGuardFuture")
+        f.debug_struct("RwLockWriteGuardFuture")
             .field("mutex", &self.mutex)
             .field("id", &self.id)
             .field("is_realized", &self.is_realized)
@@ -435,35 +442,17 @@ impl<T: Debug> Debug for WriteLockGuardFuture<'_, T> {
     }
 }
 
-impl<T: Debug> Debug for WriteLockGuard<'_, T> {
+impl<T: Debug> Debug for RwLockWriteGuard<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("WriteLockGuard")
+        f.debug_struct("RwLockWriteGuard")
             .field("mutex", &self.mutex)
             .finish()
     }
 }
 
-impl<T: Debug> Debug for WriteLockOwnedGuardFuture<T> {
+impl<T: Debug> Debug for RwLockWriteOwnedGuardFuture<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("WriteLockOwnedGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("id", &self.id)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for WriteLockOwnedGuard<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("WriteLockOwnedGuard")
-            .field("mutex", &self.mutex)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for ReadLockGuardFuture<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ReadLockGuardFuture")
+        f.debug_struct("RwLockWriteOwnedGuardFuture")
             .field("mutex", &self.mutex)
             .field("id", &self.id)
             .field("is_realized", &self.is_realized)
@@ -471,17 +460,17 @@ impl<T: Debug> Debug for ReadLockGuardFuture<'_, T> {
     }
 }
 
-impl<T: Debug> Debug for ReadLockGuard<'_, T> {
+impl<T: Debug> Debug for RwLockWriteOwnedGuard<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ReadLockGuard")
+        f.debug_struct("RwLockWriteOwnedGuard")
             .field("mutex", &self.mutex)
             .finish()
     }
 }
 
-impl<T: Debug> Debug for ReadLockOwnedGuardFuture<T> {
+impl<T: Debug> Debug for RwLockReadGuardFuture<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ReadLockOwnedGuardFuture")
+        f.debug_struct("RwLockReadGuardFuture")
             .field("mutex", &self.mutex)
             .field("id", &self.id)
             .field("is_realized", &self.is_realized)
@@ -489,9 +478,27 @@ impl<T: Debug> Debug for ReadLockOwnedGuardFuture<T> {
     }
 }
 
-impl<T: Debug> Debug for ReadLockOwnedGuard<T> {
+impl<T: Debug> Debug for RwLockReadGuard<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ReadLockOwnedGuard")
+        f.debug_struct("RwLockReadGuard")
+            .field("mutex", &self.mutex)
+            .finish()
+    }
+}
+
+impl<T: Debug> Debug for RwLockReadOwnedGuardFuture<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RwLockReadOwnedGuardFuture")
+            .field("mutex", &self.mutex)
+            .field("id", &self.id)
+            .field("is_realized", &self.is_realized)
+            .finish()
+    }
+}
+
+impl<T: Debug> Debug for RwLockReadOwnedGuard<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RwLockReadOwnedGuard")
             .field("mutex", &self.mutex)
             .finish()
     }
@@ -499,7 +506,7 @@ impl<T: Debug> Debug for ReadLockOwnedGuard<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::rwlock::{ReadLockGuard, RwLock, WriteLockGuard, WriteLockOwnedGuard};
+    use crate::rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard, RwLockWriteOwnedGuard};
     use futures::{FutureExt, StreamExt, TryStreamExt};
     use std::ops::AddAssign;
     use std::sync::atomic::AtomicUsize;
@@ -512,7 +519,7 @@ mod tests {
 
         futures::stream::iter(0..10000)
             .for_each_concurrent(None, |_| async {
-                let mut co: WriteLockGuard<i32> = c.write().await;
+                let mut co: RwLockWriteGuard<i32> = c.write().await;
                 *co += 1;
             })
             .await;
@@ -544,7 +551,7 @@ mod tests {
 
         futures::stream::iter(0..10000)
             .for_each_concurrent(None, |_| async {
-                let mut co: WriteLockOwnedGuard<i32> = c.write_owned().await;
+                let mut co: RwLockWriteOwnedGuard<i32> = c.write_owned().await;
                 *co += 1;
             })
             .await;
@@ -557,7 +564,7 @@ mod tests {
     async fn test_container() {
         let c = RwLock::new(String::from("lol"));
 
-        let mut co: WriteLockGuard<String> = c.write().await;
+        let mut co: RwLockWriteGuard<String> = c.write().await;
         co.add_assign("lol");
 
         assert_eq!(*co, "lollol");
@@ -570,7 +577,7 @@ mod tests {
         c.state = AtomicUsize::new(usize::max_value());
         c.current = AtomicUsize::new(usize::max_value());
 
-        let mut co: WriteLockGuard<String> = c.write().await;
+        let mut co: RwLockWriteGuard<String> = c.write().await;
         co.add_assign("lol");
 
         assert_eq!(*co, "lollol");
@@ -580,7 +587,7 @@ mod tests {
     async fn test_timeout() {
         let c = RwLock::new(String::from("lol"));
 
-        let co: WriteLockGuard<String> = c.write().await;
+        let co: RwLockWriteGuard<String> = c.write().await;
 
         futures::stream::iter(0..10000i32)
             .then(|_| tokio::time::timeout(Duration::from_nanos(1), c.write()))
@@ -590,7 +597,7 @@ mod tests {
 
         drop(co);
 
-        let mut co: WriteLockGuard<String> = c.write().await;
+        let mut co: RwLockWriteGuard<String> = c.write().await;
         co.add_assign("lol");
 
         assert_eq!(*co, "lollol");
@@ -600,7 +607,7 @@ mod tests {
     async fn test_concurrent_reading() {
         let c = RwLock::new(String::from("lol"));
 
-        let co: ReadLockGuard<String> = c.read().await;
+        let co: RwLockReadGuard<String> = c.read().await;
 
         futures::stream::iter(0..10000i32)
             .then(|_| c.read())
@@ -613,7 +620,7 @@ mod tests {
             Err(_)
         ));
 
-        let co2: ReadLockGuard<String> = c.read().await;
+        let co2: RwLockReadGuard<String> = c.read().await;
         assert_eq!(*co, *co2);
     }
 
@@ -621,14 +628,14 @@ mod tests {
     async fn test_concurrent_reading_writing() {
         let c = RwLock::new(String::from("lol"));
 
-        let co: ReadLockGuard<String> = c.read().await;
-        let co2: ReadLockGuard<String> = c.read().await;
+        let co: RwLockReadGuard<String> = c.read().await;
+        let co2: RwLockReadGuard<String> = c.read().await;
         assert_eq!(*co, *co2);
 
         drop(co);
         drop(co2);
 
-        let mut co: WriteLockGuard<String> = c.write().await;
+        let mut co: RwLockWriteGuard<String> = c.write().await;
 
         assert!(matches!(
             tokio::time::timeout(Duration::from_millis(1), c.read()).await,
@@ -639,8 +646,8 @@ mod tests {
 
         drop(co);
 
-        let co: ReadLockGuard<String> = c.read().await;
-        let co2: ReadLockGuard<String> = c.read().await;
+        let co: RwLockReadGuard<String> = c.read().await;
+        let co2: RwLockReadGuard<String> = c.read().await;
         assert_eq!(*co, "lollol");
         assert_eq!(*co, *co2);
     }
