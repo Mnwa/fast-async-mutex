@@ -150,7 +150,7 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
             if Some(current) == self.id.checked_sub(1) {
                 self.mutex
                     .waker
-                    .swap(cx.waker() as *const Waker as *mut Waker, Ordering::AcqRel);
+                    .store(cx.waker() as *const Waker as *mut Waker, Ordering::Release);
             }
 
             Poll::Pending
