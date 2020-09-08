@@ -121,17 +121,15 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let current = self.mutex.current.load(Ordering::Acquire);
+
         if current == self.id {
             self.is_realized = true;
             Poll::Ready(MutexGuard { mutex: self.mutex })
         } else {
             if Some(current) == self.id.checked_sub(1) {
-                let _ = self.mutex.waker.compare_exchange_weak(
-                    null_mut(),
-                    cx.waker() as *const Waker as *mut Waker,
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                );
+                self.mutex
+                    .waker
+                    .swap(cx.waker() as *const Waker as *mut Waker, Ordering::AcqRel);
             }
             Poll::Pending
         }
@@ -150,12 +148,9 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
             })
         } else {
             if Some(current) == self.id.checked_sub(1) {
-                let _ = self.mutex.waker.compare_exchange_weak(
-                    null_mut(),
-                    cx.waker() as *const Waker as *mut Waker,
-                    Ordering::AcqRel,
-                    Ordering::Acquire,
-                );
+                self.mutex
+                    .waker
+                    .swap(cx.waker() as *const Waker as *mut Waker, Ordering::AcqRel);
             }
 
             Poll::Pending
@@ -229,11 +224,9 @@ impl<T: ?Sized> Drop for MutexOwnedGuardFuture<T> {
 
 #[inline]
 fn wake_ptr(waker_ptr: &AtomicPtr<Waker>) {
-    if let Err(waker_ptr) =
-        waker_ptr.compare_exchange_weak(null_mut(), null_mut(), Ordering::AcqRel, Ordering::Acquire)
-    {
-        unsafe {
-            (*waker_ptr).wake_by_ref();
+    unsafe {
+        if let Some(waker_ptr) = waker_ptr.load(Ordering::Acquire).as_ref() {
+            waker_ptr.wake_by_ref();
         }
     }
 }
@@ -366,10 +359,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_timeout() {
-        let mut c = Mutex::new(String::from("lol"));
-
-        c.state = AtomicUsize::new(usize::max_value());
-        c.current = AtomicUsize::new(usize::max_value());
+        let c = Mutex::new(String::from("lol"));
 
         let co: MutexGuard<String> = c.lock().await;
 
