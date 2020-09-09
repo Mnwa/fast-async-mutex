@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use futures::StreamExt;
+    use futures::executor::block_on;
+    use std::sync::Arc;
     use test::Bencher;
-    use tokio::sync::{Mutex, MutexGuard};
+    use tokio::sync::Mutex;
 
     #[bench]
     fn create(b: &mut Bencher) {
@@ -11,43 +12,40 @@ mod tests {
 
     #[bench]
     fn concurrency_without_waiting(b: &mut Bencher) {
-        let mut runtime = tokio::runtime::Builder::new()
-            .enable_all()
-            .threaded_scheduler()
-            .build()
-            .unwrap();
         b.iter(|| {
-            runtime.block_on(async {
-                let c = Mutex::new(0);
+            let num = 100;
+            let mutex = Arc::new(Mutex::new(0));
 
-                futures::stream::iter(0..10000u64)
-                    .for_each_concurrent(None, |_| async {
-                        let mut co: MutexGuard<i32> = c.lock().await;
-                        *co += 1;
+            let ths: Vec<_> = (0..num)
+                .map(|_| {
+                    let mutex = mutex.clone();
+                    std::thread::spawn(move || {
+                        block_on(async {
+                            let mut lock = mutex.lock().await;
+                            *lock += 1;
+                        })
                     })
-                    .await;
-            })
-        });
+                })
+                .collect();
+
+            for thread in ths {
+                thread.join().unwrap();
+            }
+        })
     }
 
     #[bench]
     fn step_by_step_without_waiting(b: &mut Bencher) {
-        let mut runtime = tokio::runtime::Builder::new()
-            .enable_all()
-            .threaded_scheduler()
-            .build()
-            .unwrap();
         b.iter(|| {
-            runtime.block_on(async {
-                let c = Mutex::new(0);
+            let num = 100;
+            let mutex = Mutex::new(0);
 
-                futures::stream::iter(0..10000i32)
-                    .for_each(|_| async {
-                        let mut co: MutexGuard<i32> = c.lock().await;
-                        *co += 1;
-                    })
-                    .await;
-            })
-        });
+            for _ in 0..num {
+                block_on(async {
+                    let mut lock = mutex.lock().await;
+                    *lock += 1;
+                })
+            }
+        })
     }
 }

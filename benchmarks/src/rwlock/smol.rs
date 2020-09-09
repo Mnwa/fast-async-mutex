@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use futures::StreamExt;
-    use smol::lock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+    use futures::executor::block_on;
+    use smol::lock::RwLock;
+    use std::sync::Arc;
     use test::Bencher;
 
     #[bench]
@@ -11,89 +12,73 @@ mod tests {
 
     #[bench]
     fn concurrency_write(b: &mut Bencher) {
-        let mut runtime = tokio::runtime::Builder::new()
-            .enable_all()
-            .threaded_scheduler()
-            .build()
-            .unwrap();
         b.iter(|| {
-            runtime.block_on(async {
-                let c = RwLock::new(0);
-
-                futures::stream::iter(0..10000u64)
-                    .for_each_concurrent(None, |_| async {
-                        let mut co: RwLockWriteGuard<i32> = c.write().await;
-                        *co += 1;
+            let num = 100;
+            let mutex = Arc::new(RwLock::new(0));
+            let ths: Vec<_> = (0..num)
+                .map(|_i| {
+                    let mutex = mutex.clone();
+                    std::thread::spawn(move || {
+                        block_on(async {
+                            let mut lock = mutex.write().await;
+                            *lock += 1;
+                        })
                     })
-                    .await;
-            })
+                })
+                .collect();
+
+            for thread in ths {
+                thread.join().unwrap();
+            }
         });
     }
 
     #[bench]
     fn step_by_step_writing(b: &mut Bencher) {
-        let mut runtime = tokio::runtime::Builder::new()
-            .enable_all()
-            .threaded_scheduler()
-            .build()
-            .unwrap();
         b.iter(|| {
-            runtime.block_on(async {
-                let c = RwLock::new(0);
-
-                futures::stream::iter(0..10000i32)
-                    .for_each(|_| async {
-                        let mut co: RwLockWriteGuard<i32> = c.write().await;
-                        *co += 1;
-                    })
-                    .await;
-            })
+            let num = 100;
+            let mutex = RwLock::new(0);
+            for _ in 0..num {
+                block_on(async {
+                    let mut lock = mutex.write().await;
+                    *lock += 1;
+                })
+            }
         });
     }
 
     #[bench]
     fn concurrency_read(b: &mut Bencher) {
-        let mut runtime = tokio::runtime::Builder::new()
-            .enable_all()
-            .threaded_scheduler()
-            .build()
-            .unwrap();
         b.iter(|| {
-            runtime.block_on(async {
-                let c = RwLock::new(0);
-
-                let co: RwLockReadGuard<i32> = c.read().await;
-
-                futures::stream::iter(0..10000u64)
-                    .for_each_concurrent(None, |_| async {
-                        let co2: RwLockReadGuard<i32> = c.read().await;
-                        assert_eq!(*co, *co2)
+            let num = 100;
+            let mutex = Arc::new(RwLock::new(0));
+            let ths: Vec<_> = (0..num)
+                .map(|_i| {
+                    let mutex = mutex.clone();
+                    std::thread::spawn(move || {
+                        block_on(async {
+                            let _lock = mutex.read().await;
+                        })
                     })
-                    .await;
-            })
+                })
+                .collect();
+
+            for thread in ths {
+                thread.join().unwrap();
+            }
         });
     }
 
     #[bench]
     fn step_by_step_read(b: &mut Bencher) {
-        let mut runtime = tokio::runtime::Builder::new()
-            .enable_all()
-            .threaded_scheduler()
-            .build()
-            .unwrap();
         b.iter(|| {
-            runtime.block_on(async {
-                let c = RwLock::new(0);
-
-                let co: RwLockReadGuard<i32> = c.read().await;
-
-                futures::stream::iter(0..10000u64)
-                    .for_each(|_| async {
-                        let co2: RwLockReadGuard<i32> = c.read().await;
-                        assert_eq!(*co, *co2)
-                    })
-                    .await;
-            })
+            let num = 100;
+            let mutex = RwLock::new(0);
+            for _ in 0..num {
+                block_on(async {
+                    let _lock = mutex.read().await;
+                })
+            }
         });
     }
 }
