@@ -8,4 +8,4 @@ pub mod mutex;
 /// The fast async mutex which uses spinlock algorithm with using waker
 pub mod mutex_ordered;
 /// RwLock realisation which uses spinlock algorithm with using waker
-pub mod rwlock;
+pub mod rwlock_ordered;

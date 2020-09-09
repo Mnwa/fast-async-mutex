@@ -1,12 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use fast_async_mutex::rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+    use fast_async_mutex::rwlock_ordered::{
+        OrderedRwLock, OrderedRwLockReadGuard, OrderedRwLockWriteGuard,
+    };
     use futures::StreamExt;
     use test::Bencher;
 
     #[bench]
     fn create(b: &mut Bencher) {
-        b.iter(|| RwLock::new(()));
+        b.iter(|| OrderedRwLock::new(()));
     }
 
     #[bench]
@@ -18,11 +20,11 @@ mod tests {
             .unwrap();
         b.iter(|| {
             runtime.block_on(async {
-                let c = RwLock::new(0);
+                let c = OrderedRwLock::new(0);
 
                 futures::stream::iter(0..10000u64)
                     .for_each_concurrent(None, |_| async {
-                        let mut co: RwLockWriteGuard<i32> = c.write().await;
+                        let mut co: OrderedRwLockWriteGuard<i32> = c.write().await;
                         *co += 1;
                     })
                     .await;
@@ -39,11 +41,11 @@ mod tests {
             .unwrap();
         b.iter(|| {
             runtime.block_on(async {
-                let c = RwLock::new(0);
+                let c = OrderedRwLock::new(0);
 
                 futures::stream::iter(0..10000i32)
                     .for_each(|_| async {
-                        let mut co: RwLockWriteGuard<i32> = c.write().await;
+                        let mut co: OrderedRwLockWriteGuard<i32> = c.write().await;
                         *co += 1;
                     })
                     .await;
@@ -60,13 +62,13 @@ mod tests {
             .unwrap();
         b.iter(|| {
             runtime.block_on(async {
-                let c = RwLock::new(0);
+                let c = OrderedRwLock::new(0);
 
-                let co: RwLockReadGuard<i32> = c.read().await;
+                let co: OrderedRwLockReadGuard<i32> = c.read().await;
 
                 futures::stream::iter(0..10000u64)
                     .for_each_concurrent(None, |_| async {
-                        let co2: RwLockReadGuard<i32> = c.read().await;
+                        let co2: OrderedRwLockReadGuard<i32> = c.read().await;
                         assert_eq!(*co, *co2)
                     })
                     .await;
@@ -83,13 +85,13 @@ mod tests {
             .unwrap();
         b.iter(|| {
             runtime.block_on(async {
-                let c = RwLock::new(0);
+                let c = OrderedRwLock::new(0);
 
-                let co: RwLockReadGuard<i32> = c.read().await;
+                let co: OrderedRwLockReadGuard<i32> = c.read().await;
 
                 futures::stream::iter(0..10000u64)
                     .for_each(|_| async {
-                        let co2: RwLockReadGuard<i32> = c.read().await;
+                        let co2: OrderedRwLockReadGuard<i32> = c.read().await;
                         assert_eq!(*co, *co2)
                     })
                     .await;
