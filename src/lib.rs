@@ -3,9 +3,12 @@
 //! This lib built only on atomics and don't use others std synchronous data structures, which make this lib so fast.
 
 /// The fast async mutex which uses spinlock algorithm with using waker
-/// This realisation dont check an order of mutex acquiring.
 pub mod mutex;
 /// The fast async mutex which uses spinlock algorithm with using waker
+/// This realisation will check an order of mutex acquiring.
 pub mod mutex_ordered;
 /// RwLock realisation which uses spinlock algorithm with using waker
+pub mod rwlock;
+/// RwLock realisation which uses spinlock algorithm with using waker
+/// This realisation will check an order of mutex acquiring.
 pub mod rwlock_ordered;
