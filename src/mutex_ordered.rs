@@ -238,7 +238,7 @@ impl<T: Debug> Debug for OrderedMutex<T> {
             .field("state", &self.state)
             .field("current", &self.current)
             .field("waker", &self.waker)
-            .field("data", &self.data)
+            .field("data", unsafe { &*self.data.get() })
             .finish()
     }
 }

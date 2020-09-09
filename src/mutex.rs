@@ -224,7 +224,7 @@ impl<T: Debug> Debug for Mutex<T> {
         f.debug_struct("Mutex")
             .field("is_acquired", &self.is_acquired)
             .field("waker", &self.waker)
-            .field("data", &self.data)
+            .field("data", unsafe { &*self.data.get() })
             .finish()
     }
 }

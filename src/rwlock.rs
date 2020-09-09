@@ -323,8 +323,8 @@ impl<'a, T: ?Sized> Future for RwLockReadGuardFuture<'a, T> {
         if !self.mutex.is_acquired.swap(true, Ordering::AcqRel)
             || self.mutex.readers.load(Ordering::Acquire) > 0
         {
-            self.mutex.readers.fetch_add(1, Ordering::Release);
             self.is_realized = true;
+            self.mutex.readers.fetch_add(1, Ordering::Release);
             Poll::Ready(RwLockReadGuard { mutex: self.mutex })
         } else {
             self.mutex.store_waker(cx.waker());
@@ -340,8 +340,8 @@ impl<T: ?Sized> Future for RwLockReadOwnedGuardFuture<T> {
         if !self.mutex.is_acquired.swap(true, Ordering::AcqRel)
             || self.mutex.readers.load(Ordering::Acquire) > 0
         {
-            self.mutex.readers.fetch_add(1, Ordering::Release);
             self.is_realized = true;
+            self.mutex.readers.fetch_add(1, Ordering::Release);
             Poll::Ready(RwLockReadOwnedGuard {
                 mutex: self.mutex.clone(),
             })
@@ -400,9 +400,9 @@ impl<T: Debug> Debug for RwLock<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RwLock")
             .field("is_acquired", &self.is_acquired)
-            .field("waker", &self.waker)
-            .field("data", &self.data)
             .field("readers", &self.readers)
+            .field("waker", &self.waker)
+            .field("data", unsafe { &*self.data.get() })
             .finish()
     }
 }
