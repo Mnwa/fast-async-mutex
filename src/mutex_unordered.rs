@@ -122,9 +122,10 @@ impl<'a, T: ?Sized> Future for UnorderedMutexGuardFuture<'a, T> {
             self.is_realized = true;
             Poll::Ready(UnorderedMutexGuard { mutex: self.mutex })
         } else {
-            self.mutex
-                .waker
-                .swap(cx.waker() as *const Waker as *mut Waker, Ordering::AcqRel);
+            self.mutex.waker.swap(
+                Box::into_raw(Box::new(cx.waker().clone())),
+                Ordering::AcqRel,
+            );
             Poll::Pending
         }
     }
@@ -140,9 +141,10 @@ impl<T: ?Sized> Future for UnorderedMutexOwnedGuardFuture<T> {
                 mutex: self.mutex.clone(),
             })
         } else {
-            self.mutex
-                .waker
-                .swap(cx.waker() as *const Waker as *mut Waker, Ordering::AcqRel);
+            self.mutex.waker.swap(
+                Box::into_raw(Box::new(cx.waker().clone())),
+                Ordering::AcqRel,
+            );
             Poll::Pending
         }
     }
@@ -215,8 +217,10 @@ impl<T: ?Sized> Drop for UnorderedMutexOwnedGuardFuture<T> {
 #[inline]
 fn wake_ptr(waker_ptr: &AtomicPtr<Waker>) {
     unsafe {
-        if let Some(waker_ptr) = waker_ptr.load(Ordering::Acquire).as_ref() {
-            waker_ptr.wake_by_ref();
+        let waker_ptr = waker_ptr.load(Ordering::Acquire);
+        if let Some(waker) = waker_ptr.as_ref() {
+            waker.wake_by_ref();
+            waker_ptr.drop_in_place()
         }
     }
 }

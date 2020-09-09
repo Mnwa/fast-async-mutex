@@ -324,9 +324,10 @@ impl<'a, T: ?Sized> Future for RwLockReadGuardFuture<'a, T> {
             Poll::Ready(RwLockReadGuard { mutex: self.mutex })
         } else {
             if Some(current + readers) == self.id.checked_sub(1) {
-                self.mutex
-                    .waker
-                    .swap(cx.waker() as *const Waker as *mut Waker, Ordering::AcqRel);
+                self.mutex.waker.swap(
+                    Box::into_raw(Box::new(cx.waker().clone())),
+                    Ordering::AcqRel,
+                );
             }
             Poll::Pending
         }
@@ -347,9 +348,10 @@ impl<T: ?Sized> Future for RwLockReadOwnedGuardFuture<T> {
             })
         } else {
             if Some(current + readers) == self.id.checked_sub(1) {
-                self.mutex
-                    .waker
-                    .store(cx.waker() as *const Waker as *mut Waker, Ordering::Release);
+                self.mutex.waker.store(
+                    Box::into_raw(Box::new(cx.waker().clone())),
+                    Ordering::Release,
+                );
             }
 
             Poll::Pending
@@ -414,8 +416,10 @@ impl<T: ?Sized> Drop for RwLockReadOwnedGuardFuture<T> {
 #[inline]
 fn wake_ptr(waker_ptr: &AtomicPtr<Waker>) {
     unsafe {
-        if let Some(waker_ptr) = waker_ptr.load(Ordering::Acquire).as_ref() {
-            waker_ptr.wake_by_ref();
+        let waker_ptr = waker_ptr.load(Ordering::Acquire);
+        if let Some(waker) = waker_ptr.as_ref() {
+            waker.wake_by_ref();
+            waker_ptr.drop_in_place();
         }
     }
 }
