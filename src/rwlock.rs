@@ -157,8 +157,12 @@ impl<T: ?Sized> RwLock<T> {
 
     #[inline]
     fn store_waker(&self, waker: &Waker) {
-        self.waker
-            .store(Box::into_raw(Box::new(waker.clone())), Ordering::Release);
+        let _ = self.waker.compare_exchange_weak(
+            null_mut(),
+            Box::into_raw(Box::new(waker.clone())),
+            Ordering::AcqRel,
+            Ordering::Relaxed,
+        );
     }
 }
 

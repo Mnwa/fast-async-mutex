@@ -155,8 +155,12 @@ impl<T: ?Sized> OrderedRwLock<T> {
 
     #[inline]
     fn store_waker(&self, waker: &Waker) {
-        self.waker
-            .store(Box::into_raw(Box::new(waker.clone())), Ordering::Release);
+        let _ = self.waker.compare_exchange_weak(
+            null_mut(),
+            Box::into_raw(Box::new(waker.clone())),
+            Ordering::AcqRel,
+            Ordering::Relaxed,
+        );
     }
 }
 
@@ -334,10 +338,7 @@ impl<'a, T: ?Sized> Future for OrderedRwLockReadGuardFuture<'a, T> {
             Poll::Ready(OrderedRwLockReadGuard { mutex: self.mutex })
         } else {
             if Some(current + readers) == self.id.checked_sub(1) {
-                self.mutex.waker.swap(
-                    Box::into_raw(Box::new(cx.waker().clone())),
-                    Ordering::AcqRel,
-                );
+                self.mutex.store_waker(cx.waker())
             }
             Poll::Pending
         }
@@ -358,10 +359,7 @@ impl<T: ?Sized> Future for OrderedRwLockReadOwnedGuardFuture<T> {
             })
         } else {
             if Some(current + readers) == self.id.checked_sub(1) {
-                self.mutex.waker.store(
-                    Box::into_raw(Box::new(cx.waker().clone())),
-                    Ordering::Release,
-                );
+                self.mutex.store_waker(cx.waker())
             }
 
             Poll::Pending
