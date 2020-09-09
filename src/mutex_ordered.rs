@@ -13,7 +13,6 @@ use std::task::{Context, Poll, Waker};
 ///
 /// The main difference with the standard `Mutex` is ordered mutex will check an ordering of blocking.
 /// This way has some guaranties of mutex execution order, but it's a little bit slowly than original mutex.
-/// Also ordered mutex is an unstable on thread pool runtimes.
 pub struct OrderedMutex<T: ?Sized> {
     state: AtomicUsize,
     current: AtomicUsize,
@@ -98,12 +97,13 @@ impl<T: ?Sized> OrderedMutex<T> {
 
     #[inline]
     fn store_waker(&self, waker: &Waker) {
-        let _ = self.waker.compare_exchange_weak(
-            null_mut(),
-            Box::into_raw(Box::new(waker.clone())),
-            Ordering::AcqRel,
-            Ordering::Relaxed,
-        );
+        let waker_ptr = self
+            .waker
+            .swap(Box::into_raw(Box::new(waker.clone())), Ordering::AcqRel);
+
+        if !waker_ptr.is_null() {
+            unsafe { Box::from_raw(waker_ptr).wake() }
+        }
     }
 }
 
@@ -153,9 +153,7 @@ impl<'a, T: ?Sized> Future for OrderedMutexGuardFuture<'a, T> {
             self.is_realized = true;
             Poll::Ready(OrderedMutexGuard { mutex: self.mutex })
         } else {
-            if Some(current) == self.id.checked_sub(1) {
-                self.mutex.store_waker(cx.waker())
-            }
+            self.mutex.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -172,10 +170,7 @@ impl<T: ?Sized> Future for OrderedMutexOwnedGuardFuture<T> {
                 mutex: self.mutex.clone(),
             })
         } else {
-            if Some(current) == self.id.checked_sub(1) {
-                self.mutex.store_waker(cx.waker())
-            }
-
+            self.mutex.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -287,6 +282,7 @@ impl<T: Debug> Debug for OrderedMutexOwnedGuard<T> {
 #[cfg(test)]
 mod tests {
     use crate::mutex_ordered::{OrderedMutex, OrderedMutexGuard, OrderedMutexOwnedGuard};
+    use futures::executor::block_on;
     use futures::{FutureExt, StreamExt, TryStreamExt};
     use std::ops::AddAssign;
     use std::sync::atomic::AtomicUsize;
@@ -381,5 +377,31 @@ mod tests {
         co.add_assign("lol");
 
         assert_eq!(*co, "lollol");
+    }
+
+    #[test]
+    fn multithreading_test() {
+        let num = 100;
+        let mutex = Arc::new(OrderedMutex::new(0));
+        let ths: Vec<_> = (0..num)
+            .map(|_| {
+                let mutex = mutex.clone();
+                std::thread::spawn(move || {
+                    block_on(async {
+                        let mut lock = mutex.lock().await;
+                        *lock += 1;
+                    })
+                })
+            })
+            .collect();
+
+        for thread in ths {
+            thread.join().unwrap();
+        }
+
+        block_on(async {
+            let lock = mutex.lock().await;
+            assert_eq!(num, *lock)
+        })
     }
 }
