@@ -4,15 +4,14 @@ use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 /// An async mutex.
 /// It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
 pub struct Mutex<T: ?Sized> {
-    state: AtomicUsize,
-    current: AtomicUsize,
+    is_acquired: AtomicBool,
     waker: AtomicPtr<Waker>,
     data: UnsafeCell<T>,
 }
@@ -22,8 +21,7 @@ impl<T> Mutex<T> {
     #[inline]
     pub const fn new(data: T) -> Mutex<T> {
         Mutex {
-            state: AtomicUsize::new(0),
-            current: AtomicUsize::new(0),
+            is_acquired: AtomicBool::new(false),
             waker: AtomicPtr::new(null_mut()),
             data: UnsafeCell::new(data),
         }
@@ -48,10 +46,9 @@ impl<T: ?Sized> Mutex<T> {
     /// }
     /// ```
     #[inline]
-    pub fn lock(&self) -> MutexGuardFuture<T> {
+    pub const fn lock(&self) -> MutexGuardFuture<T> {
         MutexGuardFuture {
             mutex: &self,
-            id: self.state.fetch_add(1, Ordering::AcqRel),
             is_realized: false,
         }
     }
@@ -59,7 +56,7 @@ impl<T: ?Sized> Mutex<T> {
     /// Acquires the mutex.
     ///
     /// Returns a guard that releases the mutex and wake the next locker when dropped.
-    /// `MutexOwnedGuard` have a `'static` lifetime, but requires the `Arc<Mutex<T>>` type
+    /// `MutexOwnedGuardFuture` have a `'static` lifetime, but requires the `Arc<Mutex<T>>` type
     ///
     /// # Examples
     ///
@@ -77,14 +74,13 @@ impl<T: ?Sized> Mutex<T> {
     pub fn lock_owned(self: &Arc<Self>) -> MutexOwnedGuardFuture<T> {
         MutexOwnedGuardFuture {
             mutex: self.clone(),
-            id: self.state.fetch_add(1, Ordering::AcqRel),
             is_realized: false,
         }
     }
 
     #[inline]
     fn unlock(&self) {
-        self.current.fetch_add(1, Ordering::AcqRel);
+        self.is_acquired.store(false, Ordering::SeqCst);
 
         let waker_ptr = self.waker.swap(null_mut(), Ordering::AcqRel);
         if !waker_ptr.is_null() {
@@ -108,7 +104,6 @@ pub struct MutexGuard<'a, T: ?Sized> {
 
 pub struct MutexGuardFuture<'a, T: ?Sized> {
     mutex: &'a Mutex<T>,
-    id: usize,
     is_realized: bool,
 }
 
@@ -122,7 +117,6 @@ pub struct MutexOwnedGuard<T: ?Sized> {
 
 pub struct MutexOwnedGuardFuture<T: ?Sized> {
     mutex: Arc<Mutex<T>>,
-    id: usize,
     is_realized: bool,
 }
 
@@ -139,15 +133,11 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
     type Output = MutexGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let current = self.mutex.current.load(Ordering::Acquire);
-
-        if current == self.id {
+        if !self.mutex.is_acquired.swap(true, Ordering::AcqRel) {
             self.is_realized = true;
             Poll::Ready(MutexGuard { mutex: self.mutex })
         } else {
-            if Some(current) == self.id.checked_sub(1) {
-                self.mutex.store_waker(cx.waker())
-            }
+            self.mutex.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -157,17 +147,13 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
     type Output = MutexOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let current = self.mutex.current.load(Ordering::Acquire);
-        if current == self.id {
+        if !self.mutex.is_acquired.swap(true, Ordering::AcqRel) {
             self.is_realized = true;
             Poll::Ready(MutexOwnedGuard {
                 mutex: self.mutex.clone(),
             })
         } else {
-            if Some(current) == self.id.checked_sub(1) {
-                self.mutex.store_waker(cx.waker())
-            }
-
+            self.mutex.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -232,8 +218,7 @@ impl<T: ?Sized> Drop for MutexOwnedGuardFuture<T> {
 impl<T: Debug> Debug for Mutex<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Mutex")
-            .field("state", &self.state)
-            .field("current", &self.current)
+            .field("is_acquired", &self.is_acquired)
             .field("waker", &self.waker)
             .field("data", &self.data)
             .finish()
@@ -244,7 +229,6 @@ impl<T: Debug> Debug for MutexGuardFuture<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MutexGuardFuture")
             .field("mutex", &self.mutex)
-            .field("id", &self.id)
             .field("is_realized", &self.is_realized)
             .finish()
     }
@@ -262,7 +246,6 @@ impl<T: Debug> Debug for MutexOwnedGuardFuture<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MutexOwnedGuardFuture")
             .field("mutex", &self.mutex)
-            .field("id", &self.id)
             .field("is_realized", &self.is_realized)
             .finish()
     }
@@ -279,9 +262,9 @@ impl<T: Debug> Debug for MutexOwnedGuard<T> {
 #[cfg(test)]
 mod tests {
     use crate::mutex::{Mutex, MutexGuard, MutexOwnedGuard};
+    use futures::executor::block_on;
     use futures::{FutureExt, StreamExt, TryStreamExt};
     use std::ops::AddAssign;
-    use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
     use tokio::time::{delay_for, Duration};
 
@@ -343,19 +326,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_overflow() {
-        let mut c = Mutex::new(String::from("lol"));
-
-        c.state = AtomicUsize::new(usize::max_value());
-        c.current = AtomicUsize::new(usize::max_value());
-
-        let mut co: MutexGuard<String> = c.lock().await;
-        co.add_assign("lol");
-
-        assert_eq!(*co, "lollol");
-    }
-
-    #[tokio::test]
     async fn test_timeout() {
         let c = Mutex::new(String::from("lol"));
 
@@ -373,5 +343,31 @@ mod tests {
         co.add_assign("lol");
 
         assert_eq!(*co, "lollol");
+    }
+
+    #[test]
+    fn multithreading_test() {
+        let num = 100;
+        let mutex = Arc::new(Mutex::new(0));
+        let ths: Vec<_> = (0..num)
+            .map(|_| {
+                let mutex = mutex.clone();
+                std::thread::spawn(move || {
+                    block_on(async {
+                        let mut lock = mutex.lock().await;
+                        *lock += 1;
+                    })
+                })
+            })
+            .collect();
+
+        for thread in ths {
+            thread.join().unwrap();
+        }
+
+        block_on(async {
+            let lock = mutex.lock().await;
+            assert_eq!(num, *lock)
+        })
     }
 }

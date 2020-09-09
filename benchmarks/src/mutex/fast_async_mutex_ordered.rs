@@ -1,12 +1,12 @@
 #[cfg(test)]
 mod tests {
-    use fast_async_mutex::mutex_unordered::{UnorderedMutex, UnorderedMutexGuard};
+    use fast_async_mutex::mutex_ordered::{OrderedMutex, OrderedMutexGuard};
     use futures::StreamExt;
     use test::Bencher;
 
     #[bench]
     fn create(b: &mut Bencher) {
-        b.iter(|| UnorderedMutex::new(()));
+        b.iter(|| OrderedMutex::new(()));
     }
 
     #[bench]
@@ -18,11 +18,11 @@ mod tests {
             .unwrap();
         b.iter(|| {
             runtime.block_on(async {
-                let c = UnorderedMutex::new(0);
+                let c = OrderedMutex::new(0);
 
                 futures::stream::iter(0..10000u64)
                     .for_each_concurrent(None, |_| async {
-                        let mut co: UnorderedMutexGuard<i32> = c.lock().await;
+                        let mut co: OrderedMutexGuard<i32> = c.lock().await;
                         *co += 1;
                     })
                     .await;
@@ -39,11 +39,11 @@ mod tests {
             .unwrap();
         b.iter(|| {
             runtime.block_on(async {
-                let c = UnorderedMutex::new(0);
+                let c = OrderedMutex::new(0);
 
                 futures::stream::iter(0..10000i32)
                     .for_each(|_| async {
-                        let mut co: UnorderedMutexGuard<i32> = c.lock().await;
+                        let mut co: OrderedMutexGuard<i32> = c.lock().await;
                         *co += 1;
                     })
                     .await;
