@@ -134,12 +134,20 @@ impl<T: ?Sized> RwLock<T> {
     }
 
     #[inline]
-    fn unlock(&self) {
-        self.is_acquired.compare_and_swap(
-            self.readers.load(Ordering::Acquire) == 0,
-            false,
-            Ordering::AcqRel,
-        );
+    fn unlock_without_readers_check(&self) {
+        self.is_acquired.store(false, Ordering::Release);
+
+        let waker_ptr = self.waker.swap(null_mut(), Ordering::AcqRel);
+        if !waker_ptr.is_null() {
+            unsafe { Box::from_raw(waker_ptr).wake() }
+        }
+    }
+
+    #[inline]
+    fn unlock_with_readers_check(&self) {
+        if self.readers.fetch_sub(1, Ordering::Release) == 1 {
+            self.is_acquired.store(false, Ordering::Release);
+        }
 
         let waker_ptr = self.waker.swap(null_mut(), Ordering::AcqRel);
         if !waker_ptr.is_null() {
@@ -279,20 +287,20 @@ impl<T: ?Sized> DerefMut for RwLockWriteOwnedGuard<T> {
 
 impl<T: ?Sized> Drop for RwLockWriteGuard<'_, T> {
     fn drop(&mut self) {
-        self.mutex.unlock()
+        self.mutex.unlock_without_readers_check()
     }
 }
 
 impl<T: ?Sized> Drop for RwLockWriteOwnedGuard<T> {
     fn drop(&mut self) {
-        self.mutex.unlock()
+        self.mutex.unlock_without_readers_check()
     }
 }
 
 impl<T: ?Sized> Drop for RwLockWriteGuardFuture<'_, T> {
     fn drop(&mut self) {
         if !self.is_realized {
-            self.mutex.unlock()
+            self.mutex.unlock_without_readers_check()
         }
     }
 }
@@ -300,7 +308,7 @@ impl<T: ?Sized> Drop for RwLockWriteGuardFuture<'_, T> {
 impl<T: ?Sized> Drop for RwLockWriteOwnedGuardFuture<T> {
     fn drop(&mut self) {
         if !self.is_realized {
-            self.mutex.unlock()
+            self.mutex.unlock_without_readers_check()
         }
     }
 }
@@ -358,22 +366,20 @@ impl<T: ?Sized> Deref for RwLockReadOwnedGuard<T> {
 
 impl<T: ?Sized> Drop for RwLockReadGuard<'_, T> {
     fn drop(&mut self) {
-        self.mutex.readers.fetch_sub(1, Ordering::Release);
-        self.mutex.unlock()
+        self.mutex.unlock_with_readers_check()
     }
 }
 
 impl<T: ?Sized> Drop for RwLockReadOwnedGuard<T> {
     fn drop(&mut self) {
-        self.mutex.readers.fetch_sub(1, Ordering::Release);
-        self.mutex.unlock()
+        self.mutex.unlock_with_readers_check()
     }
 }
 
 impl<T: ?Sized> Drop for RwLockReadGuardFuture<'_, T> {
     fn drop(&mut self) {
         if !self.is_realized {
-            self.mutex.unlock()
+            self.mutex.unlock_without_readers_check()
         }
     }
 }
@@ -381,7 +387,7 @@ impl<T: ?Sized> Drop for RwLockReadGuardFuture<'_, T> {
 impl<T: ?Sized> Drop for RwLockReadOwnedGuardFuture<T> {
     fn drop(&mut self) {
         if !self.is_realized {
-            self.mutex.unlock()
+            self.mutex.unlock_without_readers_check()
         }
     }
 }
@@ -468,6 +474,7 @@ impl<T: Debug> Debug for RwLockReadOwnedGuard<T> {
 #[cfg(test)]
 mod tests {
     use crate::rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard, RwLockWriteOwnedGuard};
+    use futures::executor::block_on;
     use futures::{FutureExt, StreamExt, TryStreamExt};
     use std::ops::AddAssign;
     use std::sync::Arc;
@@ -597,5 +604,40 @@ mod tests {
         let co2: RwLockReadGuard<String> = c.read().await;
         assert_eq!(*co, "lollol");
         assert_eq!(*co, *co2);
+    }
+
+    #[test]
+    fn multithreading_test() {
+        let num = 100;
+        let mutex = Arc::new(RwLock::new(0));
+        let ths: Vec<_> = (0..num)
+            .map(|i| {
+                let mutex = mutex.clone();
+                std::thread::spawn(move || {
+                    block_on(async {
+                        if i % 2 == 0 {
+                            let mut lock = mutex.write().await;
+                            *lock += 1;
+                            drop(lock)
+                        } else {
+                            let lock1 = mutex.read().await;
+                            let lock2 = mutex.read().await;
+                            assert_eq!(*lock1, *lock2);
+                            drop(lock1);
+                            drop(lock2);
+                        }
+                    })
+                })
+            })
+            .collect();
+
+        for thread in ths {
+            thread.join().unwrap();
+        }
+
+        block_on(async {
+            let lock = mutex.read().await;
+            assert_eq!(num / 2, *lock)
+        })
     }
 }
