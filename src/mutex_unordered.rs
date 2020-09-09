@@ -85,11 +85,9 @@ impl<T: ?Sized> UnorderedMutex<T> {
     fn unlock(&self) {
         self.is_acquired.store(false, Ordering::SeqCst);
 
-        let waker_ptr = self.waker.load(Ordering::Acquire);
-        unsafe {
-            if let Some(waker) = waker_ptr.as_ref() {
-                waker.wake_by_ref();
-            }
+        let waker_ptr = self.waker.swap(null_mut(), Ordering::AcqRel);
+        if !waker_ptr.is_null() {
+            unsafe { Box::from_raw(waker_ptr).wake() }
         }
     }
 
