@@ -28,7 +28,9 @@ impl<T> Mutex<T> {
             data: UnsafeCell::new(data),
         }
     }
+}
 
+impl<T: ?Sized> Mutex<T> {
     /// Acquires the mutex.
     ///
     /// Returns a guard that releases the mutex and wake the next locker when dropped.
@@ -79,6 +81,24 @@ impl<T> Mutex<T> {
             is_realized: false,
         }
     }
+
+    #[inline]
+    fn unlock(&self) {
+        self.current.fetch_add(1, Ordering::AcqRel);
+
+        let waker_ptr = self.waker.load(Ordering::Acquire);
+        unsafe {
+            if let Some(waker) = waker_ptr.as_ref() {
+                waker.wake_by_ref();
+            }
+        }
+    }
+
+    #[inline]
+    fn store_waker(&self, waker: &Waker) {
+        self.waker
+            .store(Box::into_raw(Box::new(waker.clone())), Ordering::Release);
+    }
 }
 
 /// The Simple Mutex Guard
@@ -128,9 +148,7 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
             Poll::Ready(MutexGuard { mutex: self.mutex })
         } else {
             if Some(current) == self.id.checked_sub(1) {
-                self.mutex
-                    .waker
-                    .swap(cx.waker() as *const Waker as *mut Waker, Ordering::AcqRel);
+                self.mutex.store_waker(cx.waker())
             }
             Poll::Pending
         }
@@ -149,9 +167,7 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
             })
         } else {
             if Some(current) == self.id.checked_sub(1) {
-                self.mutex
-                    .waker
-                    .store(cx.waker() as *const Waker as *mut Waker, Ordering::Release);
+                self.mutex.store_waker(cx.waker())
             }
 
             Poll::Pending
@@ -189,26 +205,20 @@ impl<T: ?Sized> DerefMut for MutexOwnedGuard<T> {
 
 impl<T: ?Sized> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
-        self.mutex.current.fetch_add(1, Ordering::AcqRel);
-
-        wake_ptr(&self.mutex.waker)
+        self.mutex.unlock()
     }
 }
 
 impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
     fn drop(&mut self) {
-        self.mutex.current.fetch_add(1, Ordering::AcqRel);
-
-        wake_ptr(&self.mutex.waker)
+        self.mutex.unlock()
     }
 }
 
 impl<T: ?Sized> Drop for MutexGuardFuture<'_, T> {
     fn drop(&mut self) {
         if !self.is_realized {
-            self.mutex.current.fetch_add(1, Ordering::AcqRel);
-
-            wake_ptr(&self.mutex.waker)
+            self.mutex.unlock()
         }
     }
 }
@@ -216,18 +226,7 @@ impl<T: ?Sized> Drop for MutexGuardFuture<'_, T> {
 impl<T: ?Sized> Drop for MutexOwnedGuardFuture<T> {
     fn drop(&mut self) {
         if !self.is_realized {
-            self.mutex.current.fetch_add(1, Ordering::AcqRel);
-
-            wake_ptr(&self.mutex.waker)
-        }
-    }
-}
-
-#[inline]
-fn wake_ptr(waker_ptr: &AtomicPtr<Waker>) {
-    unsafe {
-        if let Some(waker_ptr) = waker_ptr.load(Ordering::Acquire).as_ref() {
-            waker_ptr.wake_by_ref();
+            self.mutex.unlock()
         }
     }
 }

@@ -29,7 +29,9 @@ impl<T> UnorderedMutex<T> {
             data: UnsafeCell::new(data),
         }
     }
+}
 
+impl<T: ?Sized> UnorderedMutex<T> {
     /// Acquires the mutex.
     ///
     /// Returns a guard that releases the mutex and wake the next locker when dropped.
@@ -78,6 +80,24 @@ impl<T> UnorderedMutex<T> {
             is_realized: false,
         }
     }
+
+    #[inline]
+    fn unlock(&self) {
+        self.is_acquired.store(false, Ordering::SeqCst);
+
+        let waker_ptr = self.waker.load(Ordering::Acquire);
+        unsafe {
+            if let Some(waker) = waker_ptr.as_ref() {
+                waker.wake_by_ref();
+            }
+        }
+    }
+
+    #[inline]
+    fn store_waker(&self, waker: &Waker) {
+        self.waker
+            .store(Box::into_raw(Box::new(waker.clone())), Ordering::Release);
+    }
 }
 
 /// The Simple Mutex Guard
@@ -122,10 +142,7 @@ impl<'a, T: ?Sized> Future for UnorderedMutexGuardFuture<'a, T> {
             self.is_realized = true;
             Poll::Ready(UnorderedMutexGuard { mutex: self.mutex })
         } else {
-            self.mutex.waker.swap(
-                Box::into_raw(Box::new(cx.waker().clone())),
-                Ordering::AcqRel,
-            );
+            self.mutex.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -141,10 +158,7 @@ impl<T: ?Sized> Future for UnorderedMutexOwnedGuardFuture<T> {
                 mutex: self.mutex.clone(),
             })
         } else {
-            self.mutex.waker.swap(
-                Box::into_raw(Box::new(cx.waker().clone())),
-                Ordering::AcqRel,
-            );
+            self.mutex.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -180,26 +194,20 @@ impl<T: ?Sized> DerefMut for UnorderedMutexOwnedGuard<T> {
 
 impl<T: ?Sized> Drop for UnorderedMutexGuard<'_, T> {
     fn drop(&mut self) {
-        self.mutex.is_acquired.store(false, Ordering::Release);
-
-        wake_ptr(&self.mutex.waker)
+        self.mutex.unlock()
     }
 }
 
 impl<T: ?Sized> Drop for UnorderedMutexOwnedGuard<T> {
     fn drop(&mut self) {
-        self.mutex.is_acquired.store(false, Ordering::Release);
-
-        wake_ptr(&self.mutex.waker)
+        self.mutex.unlock()
     }
 }
 
 impl<T: ?Sized> Drop for UnorderedMutexGuardFuture<'_, T> {
     fn drop(&mut self) {
         if !self.is_realized {
-            self.mutex.is_acquired.store(false, Ordering::SeqCst);
-
-            wake_ptr(&self.mutex.waker)
+            self.mutex.unlock()
         }
     }
 }
@@ -207,20 +215,7 @@ impl<T: ?Sized> Drop for UnorderedMutexGuardFuture<'_, T> {
 impl<T: ?Sized> Drop for UnorderedMutexOwnedGuardFuture<T> {
     fn drop(&mut self) {
         if !self.is_realized {
-            self.mutex.is_acquired.store(false, Ordering::SeqCst);
-
-            wake_ptr(&self.mutex.waker)
-        }
-    }
-}
-
-#[inline]
-fn wake_ptr(waker_ptr: &AtomicPtr<Waker>) {
-    unsafe {
-        let waker_ptr = waker_ptr.load(Ordering::Acquire);
-        if let Some(waker) = waker_ptr.as_ref() {
-            waker.wake_by_ref();
-            waker_ptr.drop_in_place()
+            self.mutex.unlock()
         }
     }
 }
@@ -272,6 +267,7 @@ impl<T: Debug> Debug for UnorderedMutexOwnedGuard<T> {
 #[cfg(test)]
 mod tests {
     use crate::mutex_unordered::{UnorderedMutex, UnorderedMutexGuard, UnorderedMutexOwnedGuard};
+    use futures::executor::block_on;
     use futures::{FutureExt, StreamExt, TryStreamExt};
     use std::ops::AddAssign;
     use std::sync::Arc;
@@ -352,5 +348,31 @@ mod tests {
         co.add_assign("lol");
 
         assert_eq!(*co, "lollol");
+    }
+
+    #[test]
+    fn multithreading_test() {
+        let num = 100;
+        let mutex = Arc::new(UnorderedMutex::new(0));
+        let ths: Vec<_> = (0..num)
+            .map(|_| {
+                let mutex = mutex.clone();
+                std::thread::spawn(move || {
+                    block_on(async {
+                        let mut lock = mutex.lock().await;
+                        *lock += 1;
+                    })
+                })
+            })
+            .collect();
+
+        for thread in ths {
+            thread.join().unwrap();
+        }
+
+        block_on(async {
+            let lock = mutex.lock().await;
+            assert_eq!(num, *lock)
+        })
     }
 }
