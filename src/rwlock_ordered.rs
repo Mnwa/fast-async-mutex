@@ -155,8 +155,8 @@ impl<T: ?Sized> OrderedRwLock<T> {
 
     #[inline]
     fn unlock_reader(&self) {
-        self.unlock();
         self.readers.fetch_sub(1, Ordering::AcqRel);
+        self.unlock();
     }
 
     #[inline]
@@ -501,6 +501,7 @@ mod tests {
         OrderedRwLock, OrderedRwLockReadGuard, OrderedRwLockWriteGuard,
         OrderedRwLockWriteOwnedGuard,
     };
+    use futures::executor::block_on;
     use futures::{FutureExt, StreamExt, TryStreamExt};
     use std::ops::AddAssign;
     use std::sync::atomic::AtomicUsize;
@@ -644,5 +645,37 @@ mod tests {
         let co2: OrderedRwLockReadGuard<String> = c.read().await;
         assert_eq!(*co, "lollol");
         assert_eq!(*co, *co2);
+    }
+
+    #[test]
+    fn multithreading_test() {
+        let num = 100;
+        let mutex = Arc::new(OrderedRwLock::new(0));
+        let ths: Vec<_> = (0..num)
+            .map(|i| {
+                let mutex = mutex.clone();
+                std::thread::spawn(move || {
+                    block_on(async {
+                        if i % 2 == 0 {
+                            let mut lock = mutex.write().await;
+                            *lock += 1;
+                            drop(lock);
+                        } else {
+                            // TODO Check why double acquire of read lock is stopped the test.
+                            let _lock = mutex.read().await;
+                        }
+                    })
+                })
+            })
+            .collect();
+
+        for thread in ths {
+            thread.join().unwrap();
+        }
+
+        block_on(async {
+            let lock = mutex.read().await;
+            assert_eq!(num / 2, *lock)
+        })
     }
 }
