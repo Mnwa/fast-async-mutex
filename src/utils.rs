@@ -85,3 +85,40 @@ mod drop {
         };
     }
 }
+
+#[macro_use]
+mod sync {
+    #[macro_export]
+    macro_rules! impl_send_sync_rwlock {
+        ($mutex_name:ident, $read_guard:ident, $read_guard_owned:ident, $write_guard:ident, $write_guard_owned:ident) => {
+            unsafe impl<T> Send for $mutex_name<T> where T: Send + ?Sized {}
+            unsafe impl<T> Sync for $mutex_name<T> where T: Send + Sync + ?Sized {}
+
+            unsafe impl<T> Send for $read_guard<'_, T> where T: ?Sized + Send {}
+            unsafe impl<T> Sync for $read_guard<'_, T> where T: Send + Sync + ?Sized {}
+
+            unsafe impl<T> Send for $read_guard_owned<T> where T: ?Sized + Send {}
+            unsafe impl<T> Sync for $read_guard_owned<T> where T: Send + Sync + ?Sized {}
+
+            unsafe impl<T> Send for $write_guard<'_, T> where T: ?Sized + Send {}
+            unsafe impl<T> Sync for $write_guard<'_, T> where T: Send + Sync + ?Sized {}
+
+            unsafe impl<T> Send for $write_guard_owned<T> where T: ?Sized + Send {}
+            unsafe impl<T> Sync for $write_guard_owned<T> where T: Send + Sync + ?Sized {}
+        };
+    }
+
+    #[macro_export]
+    macro_rules! impl_send_sync_mutex {
+        ($mutex_name:ident, $mutex_guard:ident, $mutex_guard_owned:ident) => {
+            unsafe impl<T> Send for $mutex_name<T> where T: Send + ?Sized {}
+            unsafe impl<T> Sync for $mutex_name<T> where T: Send + Sync + ?Sized {}
+
+            unsafe impl<T> Send for $mutex_guard<'_, T> where T: ?Sized + Send {}
+            unsafe impl<T> Sync for $mutex_guard<'_, T> where T: Send + Sync + ?Sized {}
+
+            unsafe impl<T> Send for $mutex_guard_owned<T> where T: ?Sized + Send {}
+            unsafe impl<T> Sync for $mutex_guard_owned<T> where T: Send + Sync + ?Sized {}
+        };
+    }
+}

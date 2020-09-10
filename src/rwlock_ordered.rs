@@ -233,21 +233,6 @@ pub struct OrderedRwLockReadOwnedGuardFuture<T: ?Sized> {
     is_realized: bool,
 }
 
-unsafe impl<T> Send for OrderedRwLock<T> where T: Send + ?Sized {}
-unsafe impl<T> Sync for OrderedRwLock<T> where T: Send + Sync + ?Sized {}
-
-unsafe impl<T> Send for OrderedRwLockReadGuard<'_, T> where T: ?Sized + Send {}
-unsafe impl<T> Send for OrderedRwLockReadOwnedGuard<T> where T: ?Sized + Send {}
-
-unsafe impl<T> Sync for OrderedRwLockReadGuard<'_, T> where T: Send + Sync + ?Sized {}
-unsafe impl<T> Sync for OrderedRwLockReadOwnedGuard<T> where T: Send + Sync + ?Sized {}
-
-unsafe impl<T> Send for OrderedRwLockWriteGuard<'_, T> where T: ?Sized + Send {}
-unsafe impl<T> Send for OrderedRwLockWriteOwnedGuard<T> where T: ?Sized + Send {}
-
-unsafe impl<T> Sync for OrderedRwLockWriteGuard<'_, T> where T: Send + Sync + ?Sized {}
-unsafe impl<T> Sync for OrderedRwLockWriteOwnedGuard<T> where T: Send + Sync + ?Sized {}
-
 impl<'a, T: ?Sized> Future for OrderedRwLockWriteGuardFuture<'a, T> {
     type Output = OrderedRwLockWriteGuard<'a, T>;
 
@@ -318,6 +303,14 @@ impl<T: ?Sized> Future for OrderedRwLockReadOwnedGuardFuture<T> {
         }
     }
 }
+
+crate::impl_send_sync_rwlock!(
+    OrderedRwLock,
+    OrderedRwLockReadGuard,
+    OrderedRwLockReadOwnedGuard,
+    OrderedRwLockWriteGuard,
+    OrderedRwLockWriteOwnedGuard
+);
 
 crate::impl_deref_mut!(OrderedRwLockWriteGuard, 'a);
 crate::impl_deref_mut!(OrderedRwLockWriteOwnedGuard);

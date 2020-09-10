@@ -138,15 +138,6 @@ pub struct OrderedMutexOwnedGuardFuture<T: ?Sized> {
     is_realized: bool,
 }
 
-unsafe impl<T> Send for OrderedMutex<T> where T: ?Sized + Send {}
-unsafe impl<T> Sync for OrderedMutex<T> where T: ?Sized + Send {}
-
-unsafe impl<T> Send for OrderedMutexGuard<'_, T> where T: ?Sized + Send {}
-unsafe impl<T> Send for OrderedMutexOwnedGuard<T> where T: ?Sized + Send {}
-
-unsafe impl<T> Sync for OrderedMutexGuard<'_, T> where T: ?Sized + Send + Sync {}
-unsafe impl<T> Sync for OrderedMutexOwnedGuard<T> where T: ?Sized + Send + Sync {}
-
 impl<'a, T: ?Sized> Future for OrderedMutexGuardFuture<'a, T> {
     type Output = OrderedMutexGuard<'a, T>;
 
@@ -179,6 +170,8 @@ impl<T: ?Sized> Future for OrderedMutexOwnedGuardFuture<T> {
         }
     }
 }
+
+crate::impl_send_sync_mutex!(OrderedMutex, OrderedMutexGuard, OrderedMutexOwnedGuard);
 
 crate::impl_deref_mut!(OrderedMutexGuard, 'a);
 crate::impl_deref_mut!(OrderedMutexOwnedGuard);
