@@ -1,7 +1,6 @@
 use std::cell::UnsafeCell;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::future::Future;
-use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
@@ -320,105 +319,20 @@ impl<T: ?Sized> Future for OrderedRwLockReadOwnedGuardFuture<T> {
     }
 }
 
-impl<T: ?Sized> Deref for OrderedRwLockWriteGuard<'_, T> {
-    type Target = T;
+crate::impl_deref_mut!(OrderedRwLockWriteGuard, 'a);
+crate::impl_deref_mut!(OrderedRwLockWriteOwnedGuard);
+crate::impl_deref!(OrderedRwLockReadGuard, 'a);
+crate::impl_deref!(OrderedRwLockReadOwnedGuard);
 
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.mutex.data.get() }
-    }
-}
+crate::impl_drop_guard!(OrderedRwLockWriteGuard, 'a, unlock);
+crate::impl_drop_guard!(OrderedRwLockWriteOwnedGuard, unlock);
+crate::impl_drop_guard!(OrderedRwLockReadGuard, 'a, unlock_reader);
+crate::impl_drop_guard!(OrderedRwLockReadOwnedGuard, unlock_reader);
 
-impl<T: ?Sized> DerefMut for OrderedRwLockWriteGuard<'_, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> Deref for OrderedRwLockWriteOwnedGuard<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> DerefMut for OrderedRwLockWriteOwnedGuard<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> Deref for OrderedRwLockReadGuard<'_, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> Deref for OrderedRwLockReadOwnedGuard<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> Drop for OrderedRwLockReadGuard<'_, T> {
-    fn drop(&mut self) {
-        self.mutex.unlock_reader()
-    }
-}
-
-impl<T: ?Sized> Drop for OrderedRwLockReadOwnedGuard<T> {
-    fn drop(&mut self) {
-        self.mutex.unlock_reader()
-    }
-}
-
-impl<T: ?Sized> Drop for OrderedRwLockReadGuardFuture<'_, T> {
-    fn drop(&mut self) {
-        if !self.is_realized {
-            self.mutex.unlock()
-        }
-    }
-}
-
-impl<T: ?Sized> Drop for OrderedRwLockReadOwnedGuardFuture<T> {
-    fn drop(&mut self) {
-        if !self.is_realized {
-            self.mutex.unlock()
-        }
-    }
-}
-
-impl<T: ?Sized> Drop for OrderedRwLockWriteGuard<'_, T> {
-    fn drop(&mut self) {
-        self.mutex.unlock()
-    }
-}
-
-impl<T: ?Sized> Drop for OrderedRwLockWriteOwnedGuard<T> {
-    fn drop(&mut self) {
-        self.mutex.unlock()
-    }
-}
-
-impl<T: ?Sized> Drop for OrderedRwLockWriteGuardFuture<'_, T> {
-    fn drop(&mut self) {
-        if !self.is_realized {
-            self.mutex.unlock()
-        }
-    }
-}
-
-impl<T: ?Sized> Drop for OrderedRwLockWriteOwnedGuardFuture<T> {
-    fn drop(&mut self) {
-        if !self.is_realized {
-            self.mutex.unlock()
-        }
-    }
-}
+crate::impl_drop_guard_future!(OrderedRwLockWriteGuardFuture, 'a, unlock);
+crate::impl_drop_guard_future!(OrderedRwLockWriteOwnedGuardFuture, unlock);
+crate::impl_drop_guard_future!(OrderedRwLockReadGuardFuture, 'a, unlock);
+crate::impl_drop_guard_future!(OrderedRwLockReadOwnedGuardFuture, unlock);
 
 #[cfg(test)]
 mod tests {

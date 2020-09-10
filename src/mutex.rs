@@ -1,7 +1,6 @@
 use std::cell::UnsafeCell;
 use std::fmt::Debug;
 use std::future::Future;
-use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
@@ -168,61 +167,13 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
     }
 }
 
-impl<T: ?Sized> Deref for MutexGuard<'_, T> {
-    type Target = T;
+crate::impl_deref_mut!(MutexGuard, 'a);
+crate::impl_deref_mut!(MutexOwnedGuard);
 
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> DerefMut for MutexGuard<'_, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> Deref for MutexOwnedGuard<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> DerefMut for MutexOwnedGuard<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> Drop for MutexGuard<'_, T> {
-    fn drop(&mut self) {
-        self.mutex.unlock()
-    }
-}
-
-impl<T: ?Sized> Drop for MutexOwnedGuard<T> {
-    fn drop(&mut self) {
-        self.mutex.unlock()
-    }
-}
-
-impl<T: ?Sized> Drop for MutexGuardFuture<'_, T> {
-    fn drop(&mut self) {
-        if !self.is_realized {
-            self.mutex.unlock()
-        }
-    }
-}
-
-impl<T: ?Sized> Drop for MutexOwnedGuardFuture<T> {
-    fn drop(&mut self) {
-        if !self.is_realized {
-            self.mutex.unlock()
-        }
-    }
-}
+crate::impl_drop_guard!(MutexGuard, 'a, unlock);
+crate::impl_drop_guard!(MutexOwnedGuard, unlock);
+crate::impl_drop_guard_future!(MutexGuardFuture, 'a, unlock);
+crate::impl_drop_guard_future!(MutexOwnedGuardFuture, unlock);
 
 #[cfg(test)]
 mod tests {

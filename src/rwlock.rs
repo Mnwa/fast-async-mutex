@@ -1,7 +1,6 @@
 use std::cell::UnsafeCell;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::future::Future;
-use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
@@ -135,7 +134,7 @@ impl<T: ?Sized> RwLock<T> {
     }
 
     #[inline]
-    fn unlock_without_readers_check(&self) {
+    fn unlock(&self) {
         self.is_acquired.store(false, Ordering::Release);
 
         let waker_ptr = self.waker.swap(null_mut(), Ordering::AcqRel);
@@ -145,7 +144,7 @@ impl<T: ?Sized> RwLock<T> {
     }
 
     #[inline]
-    fn unlock_with_readers_check(&self) {
+    fn unlock_reader(&self) {
         if self.readers.fetch_sub(1, Ordering::Release) == 1 {
             self.is_acquired.store(false, Ordering::Release);
         }
@@ -270,61 +269,6 @@ impl<T: ?Sized> Future for RwLockWriteOwnedGuardFuture<T> {
     }
 }
 
-impl<T: ?Sized> Deref for RwLockWriteGuard<'_, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> DerefMut for RwLockWriteGuard<'_, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> Deref for RwLockWriteOwnedGuard<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> DerefMut for RwLockWriteOwnedGuard<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> Drop for RwLockWriteGuard<'_, T> {
-    fn drop(&mut self) {
-        self.mutex.unlock_without_readers_check()
-    }
-}
-
-impl<T: ?Sized> Drop for RwLockWriteOwnedGuard<T> {
-    fn drop(&mut self) {
-        self.mutex.unlock_without_readers_check()
-    }
-}
-
-impl<T: ?Sized> Drop for RwLockWriteGuardFuture<'_, T> {
-    fn drop(&mut self) {
-        if !self.is_realized {
-            self.mutex.unlock_without_readers_check()
-        }
-    }
-}
-
-impl<T: ?Sized> Drop for RwLockWriteOwnedGuardFuture<T> {
-    fn drop(&mut self) {
-        if !self.is_realized {
-            self.mutex.unlock_without_readers_check()
-        }
-    }
-}
 impl<'a, T: ?Sized> Future for RwLockReadGuardFuture<'a, T> {
     type Output = RwLockReadGuard<'a, T>;
 
@@ -361,49 +305,20 @@ impl<T: ?Sized> Future for RwLockReadOwnedGuardFuture<T> {
     }
 }
 
-impl<T: ?Sized> Deref for RwLockReadGuard<'_, T> {
-    type Target = T;
+crate::impl_deref_mut!(RwLockWriteGuard, 'a);
+crate::impl_deref_mut!(RwLockWriteOwnedGuard);
+crate::impl_deref!(RwLockReadGuard, 'a);
+crate::impl_deref!(RwLockReadOwnedGuard);
 
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.mutex.data.get() }
-    }
-}
+crate::impl_drop_guard!(RwLockWriteGuard, 'a, unlock);
+crate::impl_drop_guard!(RwLockWriteOwnedGuard, unlock);
+crate::impl_drop_guard!(RwLockReadGuard, 'a, unlock_reader);
+crate::impl_drop_guard!(RwLockReadOwnedGuard, unlock_reader);
 
-impl<T: ?Sized> Deref for RwLockReadOwnedGuard<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.mutex.data.get() }
-    }
-}
-
-impl<T: ?Sized> Drop for RwLockReadGuard<'_, T> {
-    fn drop(&mut self) {
-        self.mutex.unlock_with_readers_check()
-    }
-}
-
-impl<T: ?Sized> Drop for RwLockReadOwnedGuard<T> {
-    fn drop(&mut self) {
-        self.mutex.unlock_with_readers_check()
-    }
-}
-
-impl<T: ?Sized> Drop for RwLockReadGuardFuture<'_, T> {
-    fn drop(&mut self) {
-        if !self.is_realized {
-            self.mutex.unlock_without_readers_check()
-        }
-    }
-}
-
-impl<T: ?Sized> Drop for RwLockReadOwnedGuardFuture<T> {
-    fn drop(&mut self) {
-        if !self.is_realized {
-            self.mutex.unlock_without_readers_check()
-        }
-    }
-}
+crate::impl_drop_guard_future!(RwLockWriteGuardFuture, 'a, unlock);
+crate::impl_drop_guard_future!(RwLockWriteOwnedGuardFuture, unlock);
+crate::impl_drop_guard_future!(RwLockReadGuardFuture, 'a, unlock);
+crate::impl_drop_guard_future!(RwLockReadOwnedGuardFuture, unlock);
 
 #[cfg(test)]
 mod tests {
