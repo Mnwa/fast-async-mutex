@@ -97,6 +97,11 @@ impl<T: ?Sized> Mutex<T> {
             Ordering::Relaxed,
         );
     }
+
+    #[inline]
+    fn try_acquire(&self) -> bool {
+        !self.is_acquired.swap(true, Ordering::AcqRel)
+    }
 }
 
 /// The Simple Mutex Guard
@@ -132,7 +137,7 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
     type Output = MutexGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.mutex.is_acquired.swap(true, Ordering::AcqRel) {
+        if self.mutex.try_acquire() {
             self.is_realized = true;
             Poll::Ready(MutexGuard { mutex: self.mutex })
         } else {
@@ -146,7 +151,7 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
     type Output = MutexOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.mutex.is_acquired.swap(true, Ordering::AcqRel) {
+        if self.mutex.try_acquire() {
             self.is_realized = true;
             Poll::Ready(MutexOwnedGuard {
                 mutex: self.mutex.clone(),

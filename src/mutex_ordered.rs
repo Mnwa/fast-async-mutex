@@ -105,6 +105,11 @@ impl<T: ?Sized> OrderedMutex<T> {
             unsafe { Box::from_raw(waker_ptr).wake() }
         }
     }
+
+    #[inline]
+    fn try_acquire(&self, id: usize) -> bool {
+        id == self.current.load(Ordering::Acquire)
+    }
 }
 
 /// The Simple OrderedMutex Guard
@@ -142,9 +147,7 @@ impl<'a, T: ?Sized> Future for OrderedMutexGuardFuture<'a, T> {
     type Output = OrderedMutexGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let current = self.mutex.current.load(Ordering::Acquire);
-
-        if current == self.id {
+        if self.mutex.try_acquire(self.id) {
             self.is_realized = true;
             Poll::Ready(OrderedMutexGuard { mutex: self.mutex })
         } else {
@@ -158,8 +161,7 @@ impl<T: ?Sized> Future for OrderedMutexOwnedGuardFuture<T> {
     type Output = OrderedMutexOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let current = self.mutex.current.load(Ordering::Acquire);
-        if current == self.id {
+        if self.mutex.try_acquire(self.id) {
             self.is_realized = true;
             Poll::Ready(OrderedMutexOwnedGuard {
                 mutex: self.mutex.clone(),

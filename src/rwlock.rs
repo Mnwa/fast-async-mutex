@@ -164,6 +164,21 @@ impl<T: ?Sized> RwLock<T> {
             Ordering::Relaxed,
         );
     }
+
+    #[inline]
+    fn try_acquire(&self) -> bool {
+        !self.is_acquired.swap(true, Ordering::AcqRel)
+    }
+
+    #[inline]
+    fn try_acquire_reader(&self) -> bool {
+        self.try_acquire() || self.readers.load(Ordering::Acquire) > 0
+    }
+
+    #[inline]
+    fn add_reader(&self) {
+        self.readers.fetch_add(1, Ordering::Release);
+    }
 }
 
 /// The Simple Write Lock Guard
@@ -228,7 +243,7 @@ impl<'a, T: ?Sized> Future for RwLockWriteGuardFuture<'a, T> {
     type Output = RwLockWriteGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.mutex.is_acquired.swap(true, Ordering::AcqRel) {
+        if self.mutex.try_acquire() {
             self.is_realized = true;
             Poll::Ready(RwLockWriteGuard { mutex: self.mutex })
         } else {
@@ -242,7 +257,7 @@ impl<T: ?Sized> Future for RwLockWriteOwnedGuardFuture<T> {
     type Output = RwLockWriteOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.mutex.is_acquired.swap(true, Ordering::AcqRel) {
+        if self.mutex.try_acquire() {
             self.is_realized = true;
             Poll::Ready(RwLockWriteOwnedGuard {
                 mutex: self.mutex.clone(),
@@ -258,11 +273,9 @@ impl<'a, T: ?Sized> Future for RwLockReadGuardFuture<'a, T> {
     type Output = RwLockReadGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.mutex.is_acquired.swap(true, Ordering::AcqRel)
-            || self.mutex.readers.load(Ordering::Acquire) > 0
-        {
+        if self.mutex.try_acquire_reader() {
             self.is_realized = true;
-            self.mutex.readers.fetch_add(1, Ordering::Release);
+            self.mutex.add_reader();
             Poll::Ready(RwLockReadGuard { mutex: self.mutex })
         } else {
             self.mutex.store_waker(cx.waker());
@@ -275,11 +288,9 @@ impl<T: ?Sized> Future for RwLockReadOwnedGuardFuture<T> {
     type Output = RwLockReadOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.mutex.is_acquired.swap(true, Ordering::AcqRel)
-            || self.mutex.readers.load(Ordering::Acquire) > 0
-        {
+        if self.mutex.try_acquire_reader() {
             self.is_realized = true;
-            self.mutex.readers.fetch_add(1, Ordering::Release);
+            self.mutex.add_reader();
             Poll::Ready(RwLockReadOwnedGuard {
                 mutex: self.mutex.clone(),
             })
