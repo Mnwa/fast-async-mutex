@@ -14,6 +14,7 @@ use std::task::{Context, Poll, Waker};
 /// The main difference with the standard `RwLock` is ordered mutex will check an ordering of blocking.
 /// This way has some guaranties of mutex execution order, but it's a little bit slowly than original mutex.
 /// Also ordered mutex is an unstable on thread pool runtimes.
+#[derive(Debug)]
 pub struct OrderedRwLock<T: ?Sized> {
     state: AtomicUsize,
     current: AtomicUsize,
@@ -174,10 +175,12 @@ impl<T: ?Sized> OrderedRwLock<T> {
 /// The Simple Write Lock Guard
 /// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally borrows the RWLock, so the mutex will not be dropped while a guard exists.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+#[derive(Debug)]
 pub struct OrderedRwLockWriteGuard<'a, T: ?Sized> {
     mutex: &'a OrderedRwLock<T>,
 }
 
+#[derive(Debug)]
 pub struct OrderedRwLockWriteGuardFuture<'a, T: ?Sized> {
     mutex: &'a OrderedRwLock<T>,
     id: usize,
@@ -188,10 +191,12 @@ pub struct OrderedRwLockWriteGuardFuture<'a, T: ?Sized> {
 /// This guard is only available from a RWLock that is wrapped in an `Arc`. It is identical to `WriteLockGuard`, except that rather than borrowing the `RWLock`, it clones the `Arc`, incrementing the reference count. This means that unlike `WriteLockGuard`, it will have the `'static` lifetime.
 /// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `RWLock`, so even if the lock goes away, the guard remains valid.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+#[derive(Debug)]
 pub struct OrderedRwLockWriteOwnedGuard<T: ?Sized> {
     mutex: Arc<OrderedRwLock<T>>,
 }
 
+#[derive(Debug)]
 pub struct OrderedRwLockWriteOwnedGuardFuture<T: ?Sized> {
     mutex: Arc<OrderedRwLock<T>>,
     id: usize,
@@ -201,10 +206,12 @@ pub struct OrderedRwLockWriteOwnedGuardFuture<T: ?Sized> {
 /// The Simple Write Lock Guard
 /// As long as you have this guard, you have shared access to the underlying `T`. The guard internally borrows the `RWLock`, so the mutex will not be dropped while a guard exists.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+#[derive(Debug)]
 pub struct OrderedRwLockReadGuard<'a, T: ?Sized> {
     mutex: &'a OrderedRwLock<T>,
 }
 
+#[derive(Debug)]
 pub struct OrderedRwLockReadGuardFuture<'a, T: ?Sized> {
     mutex: &'a OrderedRwLock<T>,
     id: usize,
@@ -215,10 +222,12 @@ pub struct OrderedRwLockReadGuardFuture<'a, T: ?Sized> {
 /// This guard is only available from a RWLock that is wrapped in an `Arc`. It is identical to `WriteLockGuard`, except that rather than borrowing the `RWLock`, it clones the `Arc`, incrementing the reference count. This means that unlike `WriteLockGuard`, it will have the `'static` lifetime.
 /// As long as you have this guard, you have shared access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `RWLock`, so even if the lock goes away, the guard remains valid.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+#[derive(Debug)]
 pub struct OrderedRwLockReadOwnedGuard<T: ?Sized> {
     mutex: Arc<OrderedRwLock<T>>,
 }
 
+#[derive(Debug)]
 pub struct OrderedRwLockReadOwnedGuardFuture<T: ?Sized> {
     mutex: Arc<OrderedRwLock<T>>,
     id: usize,
@@ -408,90 +417,6 @@ impl<T: ?Sized> Drop for OrderedRwLockWriteOwnedGuardFuture<T> {
         if !self.is_realized {
             self.mutex.unlock()
         }
-    }
-}
-
-impl<T: Debug> Debug for OrderedRwLock<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedRwLock")
-            .field("state", &self.state)
-            .field("current", &self.current)
-            .field("readers", &self.readers)
-            .field("waker", &self.waker)
-            .field("data", unsafe { &*self.data.get() })
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for OrderedRwLockWriteGuardFuture<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedRwLockWriteGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("id", &self.id)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for OrderedRwLockWriteGuard<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedRwLockWriteGuard")
-            .field("mutex", &self.mutex)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for OrderedRwLockWriteOwnedGuardFuture<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedRwLockWriteOwnedGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("id", &self.id)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for OrderedRwLockWriteOwnedGuard<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedRwLockWriteOwnedGuard")
-            .field("mutex", &self.mutex)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for OrderedRwLockReadGuardFuture<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedRwLockReadGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("id", &self.id)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for OrderedRwLockReadGuard<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedRwLockReadGuard")
-            .field("mutex", &self.mutex)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for OrderedRwLockReadOwnedGuardFuture<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedRwLockReadOwnedGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("id", &self.id)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for OrderedRwLockReadOwnedGuard<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedRwLockReadOwnedGuard")
-            .field("mutex", &self.mutex)
-            .finish()
     }
 }
 

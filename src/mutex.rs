@@ -1,5 +1,5 @@
 use std::cell::UnsafeCell;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
@@ -10,6 +10,7 @@ use std::task::{Context, Poll, Waker};
 
 /// An async mutex.
 /// It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
+#[derive(Debug)]
 pub struct Mutex<T: ?Sized> {
     is_acquired: AtomicBool,
     waker: AtomicPtr<Waker>,
@@ -102,10 +103,12 @@ impl<T: ?Sized> Mutex<T> {
 /// The Simple Mutex Guard
 /// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally borrows the Mutex, so the mutex will not be dropped while a guard exists.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+#[derive(Debug)]
 pub struct MutexGuard<'a, T: ?Sized> {
     mutex: &'a Mutex<T>,
 }
 
+#[derive(Debug)]
 pub struct MutexGuardFuture<'a, T: ?Sized> {
     mutex: &'a Mutex<T>,
     is_realized: bool,
@@ -115,10 +118,12 @@ pub struct MutexGuardFuture<'a, T: ?Sized> {
 /// This guard is only available from a Mutex that is wrapped in an `Arc`. It is identical to `MutexGuard`, except that rather than borrowing the `Mutex`, it clones the `Arc`, incrementing the reference count. This means that unlike `MutexGuard`, it will have the `'static` lifetime.
 /// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `Mutex`, so even if the lock goes away, the guard remains valid.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+#[derive(Debug)]
 pub struct MutexOwnedGuard<T: ?Sized> {
     mutex: Arc<Mutex<T>>,
 }
 
+#[derive(Debug)]
 pub struct MutexOwnedGuardFuture<T: ?Sized> {
     mutex: Arc<Mutex<T>>,
     is_realized: bool,
@@ -216,50 +221,6 @@ impl<T: ?Sized> Drop for MutexOwnedGuardFuture<T> {
         if !self.is_realized {
             self.mutex.unlock()
         }
-    }
-}
-
-impl<T: Debug> Debug for Mutex<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Mutex")
-            .field("is_acquired", &self.is_acquired)
-            .field("waker", &self.waker)
-            .field("data", unsafe { &*self.data.get() })
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for MutexGuardFuture<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for MutexGuard<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexGuard")
-            .field("mutex", &self.mutex)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for MutexOwnedGuardFuture<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexOwnedGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for MutexOwnedGuard<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MutexOwnedGuard")
-            .field("mutex", &self.mutex)
-            .finish()
     }
 }
 

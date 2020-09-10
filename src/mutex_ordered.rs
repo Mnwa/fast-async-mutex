@@ -1,5 +1,5 @@
 use std::cell::UnsafeCell;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
@@ -13,6 +13,7 @@ use std::task::{Context, Poll, Waker};
 ///
 /// The main difference with the standard `Mutex` is ordered mutex will check an ordering of blocking.
 /// This way has some guaranties of mutex execution order, but it's a little bit slowly than original mutex.
+#[derive(Debug)]
 pub struct OrderedMutex<T: ?Sized> {
     state: AtomicUsize,
     current: AtomicUsize,
@@ -110,10 +111,12 @@ impl<T: ?Sized> OrderedMutex<T> {
 /// The Simple OrderedMutex Guard
 /// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally borrows the OrderedMutex, so the mutex will not be dropped while a guard exists.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+#[derive(Debug)]
 pub struct OrderedMutexGuard<'a, T: ?Sized> {
     mutex: &'a OrderedMutex<T>,
 }
 
+#[derive(Debug)]
 pub struct OrderedMutexGuardFuture<'a, T: ?Sized> {
     mutex: &'a OrderedMutex<T>,
     id: usize,
@@ -124,10 +127,12 @@ pub struct OrderedMutexGuardFuture<'a, T: ?Sized> {
 /// This guard is only available from a OrderedMutex that is wrapped in an `Arc`. It is identical to `OrderedMutexGuard`, except that rather than borrowing the `OrderedMutex`, it clones the `Arc`, incrementing the reference count. This means that unlike `OrderedMutexGuard`, it will have the `'static` lifetime.
 /// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `OrderedMutex`, so even if the lock goes away, the guard remains valid.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+#[derive(Debug)]
 pub struct OrderedMutexOwnedGuard<T: ?Sized> {
     mutex: Arc<OrderedMutex<T>>,
 }
 
+#[derive(Debug)]
 pub struct OrderedMutexOwnedGuardFuture<T: ?Sized> {
     mutex: Arc<OrderedMutex<T>>,
     id: usize,
@@ -229,53 +234,6 @@ impl<T: ?Sized> Drop for OrderedMutexOwnedGuardFuture<T> {
         if !self.is_realized {
             self.mutex.unlock()
         }
-    }
-}
-
-impl<T: Debug> Debug for OrderedMutex<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedMutex")
-            .field("state", &self.state)
-            .field("current", &self.current)
-            .field("waker", &self.waker)
-            .field("data", unsafe { &*self.data.get() })
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for OrderedMutexGuardFuture<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedMutexGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("id", &self.id)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for OrderedMutexGuard<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedMutexGuard")
-            .field("mutex", &self.mutex)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for OrderedMutexOwnedGuardFuture<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedMutexOwnedGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("id", &self.id)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for OrderedMutexOwnedGuard<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OrderedMutexOwnedGuard")
-            .field("mutex", &self.mutex)
-            .finish()
     }
 }
 

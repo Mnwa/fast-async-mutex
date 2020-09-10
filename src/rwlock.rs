@@ -10,6 +10,7 @@ use std::task::{Context, Poll, Waker};
 
 /// An async `ordered` RwLock.
 /// It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
+#[derive(Debug)]
 pub struct RwLock<T: ?Sized> {
     is_acquired: AtomicBool,
     readers: AtomicUsize,
@@ -169,10 +170,12 @@ impl<T: ?Sized> RwLock<T> {
 /// The Simple Write Lock Guard
 /// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally borrows the RWLock, so the mutex will not be dropped while a guard exists.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+#[derive(Debug)]
 pub struct RwLockWriteGuard<'a, T: ?Sized> {
     mutex: &'a RwLock<T>,
 }
 
+#[derive(Debug)]
 pub struct RwLockWriteGuardFuture<'a, T: ?Sized> {
     mutex: &'a RwLock<T>,
     is_realized: bool,
@@ -182,10 +185,12 @@ pub struct RwLockWriteGuardFuture<'a, T: ?Sized> {
 /// This guard is only available from a RWLock that is wrapped in an `Arc`. It is identical to `WriteLockGuard`, except that rather than borrowing the `RWLock`, it clones the `Arc`, incrementing the reference count. This means that unlike `WriteLockGuard`, it will have the `'static` lifetime.
 /// As long as you have this guard, you have exclusive access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `RWLock`, so even if the lock goes away, the guard remains valid.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+#[derive(Debug)]
 pub struct RwLockWriteOwnedGuard<T: ?Sized> {
     mutex: Arc<RwLock<T>>,
 }
 
+#[derive(Debug)]
 pub struct RwLockWriteOwnedGuardFuture<T: ?Sized> {
     mutex: Arc<RwLock<T>>,
     is_realized: bool,
@@ -194,10 +199,12 @@ pub struct RwLockWriteOwnedGuardFuture<T: ?Sized> {
 /// The Simple Write Lock Guard
 /// As long as you have this guard, you have shared access to the underlying `T`. The guard internally borrows the `RWLock`, so the mutex will not be dropped while a guard exists.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+#[derive(Debug)]
 pub struct RwLockReadGuard<'a, T: ?Sized> {
     mutex: &'a RwLock<T>,
 }
 
+#[derive(Debug)]
 pub struct RwLockReadGuardFuture<'a, T: ?Sized> {
     mutex: &'a RwLock<T>,
     is_realized: bool,
@@ -207,10 +214,12 @@ pub struct RwLockReadGuardFuture<'a, T: ?Sized> {
 /// This guard is only available from a RWLock that is wrapped in an `Arc`. It is identical to `WriteLockGuard`, except that rather than borrowing the `RWLock`, it clones the `Arc`, incrementing the reference count. This means that unlike `WriteLockGuard`, it will have the `'static` lifetime.
 /// As long as you have this guard, you have shared access to the underlying `T`. The guard internally keeps a reference-couned pointer to the original `RWLock`, so even if the lock goes away, the guard remains valid.
 /// The lock is automatically released and waked the next locker whenever the guard is dropped, at which point lock will succeed yet again.
+#[derive(Debug)]
 pub struct RwLockReadOwnedGuard<T: ?Sized> {
     mutex: Arc<RwLock<T>>,
 }
 
+#[derive(Debug)]
 pub struct RwLockReadOwnedGuardFuture<T: ?Sized> {
     mutex: Arc<RwLock<T>>,
     is_realized: bool,
@@ -393,85 +402,6 @@ impl<T: ?Sized> Drop for RwLockReadOwnedGuardFuture<T> {
         if !self.is_realized {
             self.mutex.unlock_without_readers_check()
         }
-    }
-}
-
-impl<T: Debug> Debug for RwLock<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RwLock")
-            .field("is_acquired", &self.is_acquired)
-            .field("readers", &self.readers)
-            .field("waker", &self.waker)
-            .field("data", unsafe { &*self.data.get() })
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for RwLockWriteGuardFuture<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RwLockWriteGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for RwLockWriteGuard<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RwLockWriteGuard")
-            .field("mutex", &self.mutex)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for RwLockWriteOwnedGuardFuture<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RwLockWriteOwnedGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for RwLockWriteOwnedGuard<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RwLockWriteOwnedGuard")
-            .field("mutex", &self.mutex)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for RwLockReadGuardFuture<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RwLockReadGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for RwLockReadGuard<'_, T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RwLockReadGuard")
-            .field("mutex", &self.mutex)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for RwLockReadOwnedGuardFuture<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RwLockReadOwnedGuardFuture")
-            .field("mutex", &self.mutex)
-            .field("is_realized", &self.is_realized)
-            .finish()
-    }
-}
-
-impl<T: Debug> Debug for RwLockReadOwnedGuard<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RwLockReadOwnedGuard")
-            .field("mutex", &self.mutex)
-            .finish()
     }
 }
 
