@@ -7,8 +7,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-/// An async `ordered` RwLock.
-/// It will be work with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std`, etc..
+/// The RW Lock mechanism accepts you get concurrent shared access to your data without waiting.
+/// And get unique access with locks like a Mutex.
 #[derive(Debug)]
 pub struct RwLock<T: ?Sized> {
     readers: AtomicUsize,
@@ -16,7 +16,7 @@ pub struct RwLock<T: ?Sized> {
 }
 
 impl<T> RwLock<T> {
-    /// Create a new `UnorderedRWLock`
+    /// Create a new `RWLock`
     #[inline]
     pub const fn new(data: T) -> RwLock<T> {
         RwLock {

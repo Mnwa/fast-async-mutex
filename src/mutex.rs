@@ -5,8 +5,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-/// An async mutex.
-/// It will be work with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std`, etc..
+/// The simple Mutex, which will provide unique access to you data between multiple threads/futures.
 #[derive(Debug)]
 pub struct Mutex<T: ?Sized> {
     inner: Inner<T>,
