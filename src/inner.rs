@@ -47,11 +47,6 @@ impl<T: ?Sized> Inner<T> {
     pub(crate) fn try_acquire(&self) -> bool {
         !self.is_acquired.swap(true, Ordering::AcqRel)
     }
-
-    #[inline]
-    pub(crate) fn try_acquire_reader(&self, readers: usize) -> bool {
-        readers > 0 || self.try_acquire()
-    }
 }
 
 #[derive(Debug)]
@@ -104,10 +99,5 @@ impl<T: ?Sized> OrderedInner<T> {
     #[inline]
     pub(crate) fn try_acquire(&self, id: usize) -> bool {
         id == self.current.load(Ordering::Acquire)
-    }
-
-    #[inline]
-    pub(crate) fn try_acquire_reader(&self, id: usize, readers: usize) -> bool {
-        id == self.current.load(Ordering::Acquire) + readers
     }
 }

@@ -138,18 +138,18 @@ impl<T: ?Sized> OrderedRwLock<T> {
 
     #[inline]
     fn unlock_reader(&self) {
-        self.readers.fetch_sub(1, Ordering::AcqRel);
-        self.inner.unlock();
-    }
-
-    #[inline]
-    fn get_readers(&self) -> usize {
-        self.readers.load(Ordering::Acquire)
+        self.readers.fetch_sub(1, Ordering::Release);
+        self.inner.unlock()
     }
 
     #[inline]
     fn add_reader(&self) {
         self.readers.fetch_add(1, Ordering::Release);
+    }
+
+    #[inline]
+    pub fn try_acquire_reader(&self, id: usize) -> bool {
+        id == self.inner.current.load(Ordering::Acquire) + self.readers.load(Ordering::Acquire)
     }
 }
 
@@ -249,11 +249,7 @@ impl<'a, T: ?Sized> Future for OrderedRwLockReadGuardFuture<'a, T> {
     type Output = OrderedRwLockReadGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self
-            .mutex
-            .inner
-            .try_acquire_reader(self.id, self.mutex.get_readers())
-        {
+        if self.mutex.try_acquire_reader(self.id) {
             self.is_realized = true;
             self.mutex.add_reader();
             Poll::Ready(OrderedRwLockReadGuard { mutex: &self.mutex })
@@ -268,11 +264,7 @@ impl<T: ?Sized> Future for OrderedRwLockReadOwnedGuardFuture<T> {
     type Output = OrderedRwLockReadOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self
-            .mutex
-            .inner
-            .try_acquire_reader(self.id, self.mutex.get_readers())
-        {
+        if self.mutex.try_acquire_reader(self.id) {
             self.is_realized = true;
             self.mutex.add_reader();
             Poll::Ready(OrderedRwLockReadOwnedGuard {
