@@ -441,7 +441,11 @@ mod tests {
                             *lock += 1;
                             drop(lock)
                         } else {
-                            let _lock = mutex.read().await;
+                            let lock1 = mutex.read().await;
+                            let lock2 = mutex.read().await;
+                            assert_eq!(*lock1, *lock2);
+                            drop(lock1);
+                            drop(lock2);
                         }
                     })
                 })
