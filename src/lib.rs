@@ -13,4 +13,5 @@ pub mod rwlock;
 /// This realisation will check an order of mutex acquiring.
 pub mod rwlock_ordered;
 
+pub(crate) mod inner;
 pub(crate) mod utils;

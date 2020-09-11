@@ -82,20 +82,21 @@ impl<T: ?Sized> Mutex<T> {
     fn unlock(&self) {
         self.is_acquired.store(false, Ordering::SeqCst);
 
-        let waker_ptr = self.waker.swap(null_mut(), Ordering::AcqRel);
-        if !waker_ptr.is_null() {
-            unsafe { Box::from_raw(waker_ptr).wake() }
-        }
+        self.try_wake(null_mut())
     }
 
     #[inline]
     fn store_waker(&self, waker: &Waker) {
-        let _ = self.waker.compare_exchange_weak(
-            null_mut(),
-            Box::into_raw(Box::new(waker.clone())),
-            Ordering::AcqRel,
-            Ordering::Relaxed,
-        );
+        self.try_wake(Box::into_raw(Box::new(waker.clone())));
+    }
+
+    #[inline]
+    fn try_wake(&self, waker_ptr: *mut Waker) {
+        let waker_ptr = self.waker.swap(waker_ptr, Ordering::AcqRel);
+
+        if !waker_ptr.is_null() {
+            unsafe { Box::from_raw(waker_ptr).wake() }
+        }
     }
 
     #[inline]

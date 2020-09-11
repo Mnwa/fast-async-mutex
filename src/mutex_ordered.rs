@@ -89,17 +89,17 @@ impl<T: ?Sized> OrderedMutex<T> {
     fn unlock(&self) {
         self.current.fetch_add(1, Ordering::AcqRel);
 
-        let waker_ptr = self.waker.swap(null_mut(), Ordering::AcqRel);
-        if !waker_ptr.is_null() {
-            unsafe { Box::from_raw(waker_ptr).wake() }
-        }
+        self.try_wake(null_mut())
     }
 
     #[inline]
     fn store_waker(&self, waker: &Waker) {
-        let waker_ptr = self
-            .waker
-            .swap(Box::into_raw(Box::new(waker.clone())), Ordering::AcqRel);
+        self.try_wake(Box::into_raw(Box::new(waker.clone())));
+    }
+
+    #[inline]
+    fn try_wake(&self, waker_ptr: *mut Waker) {
+        let waker_ptr = self.waker.swap(waker_ptr, Ordering::AcqRel);
 
         if !waker_ptr.is_null() {
             unsafe { Box::from_raw(waker_ptr).wake() }
