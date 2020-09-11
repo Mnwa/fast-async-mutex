@@ -138,6 +138,7 @@ impl<T: ?Sized> RwLock<T> {
         }
     }
 
+    #[inline]
     fn get_readers(&self) -> usize {
         self.readers.load(Ordering::Acquire)
     }
