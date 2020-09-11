@@ -1,11 +1,10 @@
-use std::cell::UnsafeCell;
+use crate::inner::OrderedInner;
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
-use std::ptr::null_mut;
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 
 /// An async `ordered` RwLock.
 /// It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
@@ -15,11 +14,8 @@ use std::task::{Context, Poll, Waker};
 /// Also ordered mutex is an unstable on thread pool runtimes.
 #[derive(Debug)]
 pub struct OrderedRwLock<T: ?Sized> {
-    state: AtomicUsize,
-    current: AtomicUsize,
     readers: AtomicUsize,
-    waker: AtomicPtr<Waker>,
-    data: UnsafeCell<T>,
+    inner: OrderedInner<T>,
 }
 
 impl<T> OrderedRwLock<T> {
@@ -27,11 +23,8 @@ impl<T> OrderedRwLock<T> {
     #[inline]
     pub const fn new(data: T) -> OrderedRwLock<T> {
         OrderedRwLock {
-            state: AtomicUsize::new(0),
-            current: AtomicUsize::new(0),
             readers: AtomicUsize::new(0),
-            waker: AtomicPtr::new(null_mut()),
-            data: UnsafeCell::new(data),
+            inner: OrderedInner::new(data),
         }
     }
 }
@@ -58,7 +51,7 @@ impl<T: ?Sized> OrderedRwLock<T> {
     pub fn write(&self) -> OrderedRwLockWriteGuardFuture<T> {
         OrderedRwLockWriteGuardFuture {
             mutex: &self,
-            id: self.state.fetch_add(1, Ordering::AcqRel),
+            id: self.inner.generate_id(),
             is_realized: false,
         }
     }
@@ -85,7 +78,7 @@ impl<T: ?Sized> OrderedRwLock<T> {
     pub fn write_owned(self: &Arc<Self>) -> OrderedRwLockWriteOwnedGuardFuture<T> {
         OrderedRwLockWriteOwnedGuardFuture {
             mutex: self.clone(),
-            id: self.state.fetch_add(1, Ordering::AcqRel),
+            id: self.inner.generate_id(),
             is_realized: false,
         }
     }
@@ -111,7 +104,7 @@ impl<T: ?Sized> OrderedRwLock<T> {
     pub fn read(&self) -> OrderedRwLockReadGuardFuture<T> {
         OrderedRwLockReadGuardFuture {
             mutex: &self,
-            id: self.state.fetch_add(1, Ordering::AcqRel),
+            id: self.inner.generate_id(),
             is_realized: false,
         }
     }
@@ -138,46 +131,20 @@ impl<T: ?Sized> OrderedRwLock<T> {
     pub fn read_owned(self: &Arc<Self>) -> OrderedRwLockReadOwnedGuardFuture<T> {
         OrderedRwLockReadOwnedGuardFuture {
             mutex: self.clone(),
-            id: self.state.fetch_add(1, Ordering::AcqRel),
+            id: self.inner.generate_id(),
             is_realized: false,
         }
     }
 
     #[inline]
-    fn unlock(&self) {
-        self.current.fetch_add(1, Ordering::AcqRel);
-
-        self.try_wake(null_mut())
-    }
-
-    #[inline]
     fn unlock_reader(&self) {
         self.readers.fetch_sub(1, Ordering::AcqRel);
-        self.unlock();
+        self.inner.unlock();
     }
 
     #[inline]
-    fn store_waker(&self, waker: &Waker) {
-        self.try_wake(Box::into_raw(Box::new(waker.clone())));
-    }
-
-    #[inline]
-    fn try_wake(&self, waker_ptr: *mut Waker) {
-        let waker_ptr = self.waker.swap(waker_ptr, Ordering::AcqRel);
-
-        if !waker_ptr.is_null() {
-            unsafe { Box::from_raw(waker_ptr).wake() }
-        }
-    }
-
-    #[inline]
-    fn try_acquire(&self, id: usize) -> bool {
-        id == self.current.load(Ordering::Acquire)
-    }
-
-    #[inline]
-    fn try_acquire_reader(&self, id: usize) -> bool {
-        id == self.current.load(Ordering::Acquire) + self.readers.load(Ordering::Acquire)
+    fn get_readers(&self) -> usize {
+        self.readers.load(Ordering::Acquire)
     }
 
     #[inline]
@@ -252,11 +219,11 @@ impl<'a, T: ?Sized> Future for OrderedRwLockWriteGuardFuture<'a, T> {
     type Output = OrderedRwLockWriteGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.try_acquire(self.id) {
+        if self.mutex.inner.try_acquire(self.id) {
             self.is_realized = true;
             Poll::Ready(OrderedRwLockWriteGuard { mutex: self.mutex })
         } else {
-            self.mutex.store_waker(cx.waker());
+            self.mutex.inner.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -266,13 +233,13 @@ impl<T: ?Sized> Future for OrderedRwLockWriteOwnedGuardFuture<T> {
     type Output = OrderedRwLockWriteOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.try_acquire(self.id) {
+        if self.mutex.inner.try_acquire(self.id) {
             self.is_realized = true;
             Poll::Ready(OrderedRwLockWriteOwnedGuard {
                 mutex: self.mutex.clone(),
             })
         } else {
-            self.mutex.store_waker(cx.waker());
+            self.mutex.inner.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -282,12 +249,16 @@ impl<'a, T: ?Sized> Future for OrderedRwLockReadGuardFuture<'a, T> {
     type Output = OrderedRwLockReadGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.try_acquire_reader(self.id) {
+        if self
+            .mutex
+            .inner
+            .try_acquire_reader(self.id, self.mutex.get_readers())
+        {
             self.is_realized = true;
             self.mutex.add_reader();
             Poll::Ready(OrderedRwLockReadGuard { mutex: &self.mutex })
         } else {
-            self.mutex.store_waker(cx.waker());
+            self.mutex.inner.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -297,14 +268,18 @@ impl<T: ?Sized> Future for OrderedRwLockReadOwnedGuardFuture<T> {
     type Output = OrderedRwLockReadOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.try_acquire_reader(self.id) {
+        if self
+            .mutex
+            .inner
+            .try_acquire_reader(self.id, self.mutex.get_readers())
+        {
             self.is_realized = true;
             self.mutex.add_reader();
             Poll::Ready(OrderedRwLockReadOwnedGuard {
                 mutex: self.mutex.clone(),
             })
         } else {
-            self.mutex.store_waker(cx.waker());
+            self.mutex.inner.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -325,8 +300,8 @@ crate::impl_deref!(OrderedRwLockReadOwnedGuard);
 
 crate::impl_drop_guard!(OrderedRwLockWriteGuard, 'a, unlock);
 crate::impl_drop_guard!(OrderedRwLockWriteOwnedGuard, unlock);
-crate::impl_drop_guard!(OrderedRwLockReadGuard, 'a, unlock_reader);
-crate::impl_drop_guard!(OrderedRwLockReadOwnedGuard, unlock_reader);
+crate::impl_drop_guard_self!(OrderedRwLockReadGuard, 'a, unlock_reader);
+crate::impl_drop_guard_self!(OrderedRwLockReadOwnedGuard, unlock_reader);
 
 crate::impl_drop_guard_future!(OrderedRwLockWriteGuardFuture, 'a, unlock);
 crate::impl_drop_guard_future!(OrderedRwLockWriteOwnedGuardFuture, unlock);
@@ -407,8 +382,8 @@ mod tests {
     async fn test_overflow() {
         let mut c = OrderedRwLock::new(String::from("lol"));
 
-        c.state = AtomicUsize::new(usize::max_value());
-        c.current = AtomicUsize::new(usize::max_value());
+        c.inner.state = AtomicUsize::new(usize::max_value());
+        c.inner.current = AtomicUsize::new(usize::max_value());
 
         let mut co: OrderedRwLockWriteGuard<String> = c.write().await;
         co.add_assign("lol");

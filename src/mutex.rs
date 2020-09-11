@@ -1,19 +1,15 @@
-use std::cell::UnsafeCell;
+use crate::inner::Inner;
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
-use std::ptr::null_mut;
-use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 
 /// An async mutex.
 /// It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
 #[derive(Debug)]
 pub struct Mutex<T: ?Sized> {
-    is_acquired: AtomicBool,
-    waker: AtomicPtr<Waker>,
-    data: UnsafeCell<T>,
+    inner: Inner<T>,
 }
 
 impl<T> Mutex<T> {
@@ -21,9 +17,7 @@ impl<T> Mutex<T> {
     #[inline]
     pub const fn new(data: T) -> Mutex<T> {
         Mutex {
-            is_acquired: AtomicBool::new(false),
-            waker: AtomicPtr::new(null_mut()),
-            data: UnsafeCell::new(data),
+            inner: Inner::new(data),
         }
     }
 }
@@ -77,32 +71,6 @@ impl<T: ?Sized> Mutex<T> {
             is_realized: false,
         }
     }
-
-    #[inline]
-    fn unlock(&self) {
-        self.is_acquired.store(false, Ordering::SeqCst);
-
-        self.try_wake(null_mut())
-    }
-
-    #[inline]
-    fn store_waker(&self, waker: &Waker) {
-        self.try_wake(Box::into_raw(Box::new(waker.clone())));
-    }
-
-    #[inline]
-    fn try_wake(&self, waker_ptr: *mut Waker) {
-        let waker_ptr = self.waker.swap(waker_ptr, Ordering::AcqRel);
-
-        if !waker_ptr.is_null() {
-            unsafe { Box::from_raw(waker_ptr).wake() }
-        }
-    }
-
-    #[inline]
-    fn try_acquire(&self) -> bool {
-        !self.is_acquired.swap(true, Ordering::AcqRel)
-    }
 }
 
 /// The Simple Mutex Guard
@@ -138,11 +106,11 @@ impl<'a, T: ?Sized> Future for MutexGuardFuture<'a, T> {
     type Output = MutexGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.try_acquire() {
+        if self.mutex.inner.try_acquire() {
             self.is_realized = true;
             Poll::Ready(MutexGuard { mutex: self.mutex })
         } else {
-            self.mutex.store_waker(cx.waker());
+            self.mutex.inner.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -152,13 +120,13 @@ impl<T: ?Sized> Future for MutexOwnedGuardFuture<T> {
     type Output = MutexOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.try_acquire() {
+        if self.mutex.inner.try_acquire() {
             self.is_realized = true;
             Poll::Ready(MutexOwnedGuard {
                 mutex: self.mutex.clone(),
             })
         } else {
-            self.mutex.store_waker(cx.waker());
+            self.mutex.inner.store_waker(cx.waker());
             Poll::Pending
         }
     }

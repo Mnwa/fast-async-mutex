@@ -1,20 +1,18 @@
-use std::cell::UnsafeCell;
+use crate::inner::Inner;
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 
 /// An async `ordered` RwLock.
 /// It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
 #[derive(Debug)]
 pub struct RwLock<T: ?Sized> {
-    is_acquired: AtomicBool,
     readers: AtomicUsize,
-    waker: AtomicPtr<Waker>,
-    data: UnsafeCell<T>,
+    inner: Inner<T>,
 }
 
 impl<T> RwLock<T> {
@@ -22,10 +20,8 @@ impl<T> RwLock<T> {
     #[inline]
     pub const fn new(data: T) -> RwLock<T> {
         RwLock {
-            is_acquired: AtomicBool::new(false),
             readers: AtomicUsize::new(0),
-            waker: AtomicPtr::new(null_mut()),
-            data: UnsafeCell::new(data),
+            inner: Inner::new(data),
         }
     }
 }
@@ -134,43 +130,16 @@ impl<T: ?Sized> RwLock<T> {
     }
 
     #[inline]
-    fn unlock(&self) {
-        self.is_acquired.store(false, Ordering::Release);
-
-        self.try_wake(null_mut());
-    }
-
-    #[inline]
     fn unlock_reader(&self) {
         if self.readers.fetch_sub(1, Ordering::Release) == 1 {
-            self.is_acquired.store(false, Ordering::Release);
-        }
-
-        self.try_wake(null_mut())
-    }
-
-    #[inline]
-    fn store_waker(&self, waker: &Waker) {
-        self.try_wake(Box::into_raw(Box::new(waker.clone())));
-    }
-
-    #[inline]
-    fn try_wake(&self, waker_ptr: *mut Waker) {
-        let waker_ptr = self.waker.swap(waker_ptr, Ordering::AcqRel);
-
-        if !waker_ptr.is_null() {
-            unsafe { Box::from_raw(waker_ptr).wake() }
+            self.inner.unlock()
+        } else {
+            self.inner.try_wake(null_mut())
         }
     }
 
-    #[inline]
-    fn try_acquire(&self) -> bool {
-        !self.is_acquired.swap(true, Ordering::AcqRel)
-    }
-
-    #[inline]
-    fn try_acquire_reader(&self) -> bool {
-        self.try_acquire() || self.readers.load(Ordering::Acquire) > 0
+    fn get_readers(&self) -> usize {
+        self.readers.load(Ordering::Acquire)
     }
 
     #[inline]
@@ -241,11 +210,11 @@ impl<'a, T: ?Sized> Future for RwLockWriteGuardFuture<'a, T> {
     type Output = RwLockWriteGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.try_acquire() {
+        if self.mutex.inner.try_acquire() {
             self.is_realized = true;
             Poll::Ready(RwLockWriteGuard { mutex: self.mutex })
         } else {
-            self.mutex.store_waker(cx.waker());
+            self.mutex.inner.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -255,13 +224,13 @@ impl<T: ?Sized> Future for RwLockWriteOwnedGuardFuture<T> {
     type Output = RwLockWriteOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.try_acquire() {
+        if self.mutex.inner.try_acquire() {
             self.is_realized = true;
             Poll::Ready(RwLockWriteOwnedGuard {
                 mutex: self.mutex.clone(),
             })
         } else {
-            self.mutex.store_waker(cx.waker());
+            self.mutex.inner.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -271,12 +240,16 @@ impl<'a, T: ?Sized> Future for RwLockReadGuardFuture<'a, T> {
     type Output = RwLockReadGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.try_acquire_reader() {
+        if self
+            .mutex
+            .inner
+            .try_acquire_reader(self.mutex.get_readers())
+        {
             self.is_realized = true;
             self.mutex.add_reader();
             Poll::Ready(RwLockReadGuard { mutex: self.mutex })
         } else {
-            self.mutex.store_waker(cx.waker());
+            self.mutex.inner.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -286,14 +259,18 @@ impl<T: ?Sized> Future for RwLockReadOwnedGuardFuture<T> {
     type Output = RwLockReadOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.try_acquire_reader() {
+        if self
+            .mutex
+            .inner
+            .try_acquire_reader(self.mutex.get_readers())
+        {
             self.is_realized = true;
             self.mutex.add_reader();
             Poll::Ready(RwLockReadOwnedGuard {
                 mutex: self.mutex.clone(),
             })
         } else {
-            self.mutex.store_waker(cx.waker());
+            self.mutex.inner.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -314,8 +291,8 @@ crate::impl_deref!(RwLockReadOwnedGuard);
 
 crate::impl_drop_guard!(RwLockWriteGuard, 'a, unlock);
 crate::impl_drop_guard!(RwLockWriteOwnedGuard, unlock);
-crate::impl_drop_guard!(RwLockReadGuard, 'a, unlock_reader);
-crate::impl_drop_guard!(RwLockReadOwnedGuard, unlock_reader);
+crate::impl_drop_guard_self!(RwLockReadGuard, 'a, unlock_reader);
+crate::impl_drop_guard_self!(RwLockReadOwnedGuard, unlock_reader);
 
 crate::impl_drop_guard_future!(RwLockWriteGuardFuture, 'a, unlock);
 crate::impl_drop_guard_future!(RwLockWriteOwnedGuardFuture, unlock);

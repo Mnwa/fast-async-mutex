@@ -1,11 +1,9 @@
-use std::cell::UnsafeCell;
+use crate::inner::OrderedInner;
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
-use std::ptr::null_mut;
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 
 /// An async `ordered` mutex.
 /// It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
@@ -14,10 +12,7 @@ use std::task::{Context, Poll, Waker};
 /// This way has some guaranties of mutex execution order, but it's a little bit slowly than original mutex.
 #[derive(Debug)]
 pub struct OrderedMutex<T: ?Sized> {
-    state: AtomicUsize,
-    current: AtomicUsize,
-    waker: AtomicPtr<Waker>,
-    data: UnsafeCell<T>,
+    inner: OrderedInner<T>,
 }
 
 impl<T> OrderedMutex<T> {
@@ -25,10 +20,7 @@ impl<T> OrderedMutex<T> {
     #[inline]
     pub const fn new(data: T) -> OrderedMutex<T> {
         OrderedMutex {
-            state: AtomicUsize::new(0),
-            current: AtomicUsize::new(0),
-            waker: AtomicPtr::new(null_mut()),
-            data: UnsafeCell::new(data),
+            inner: OrderedInner::new(data),
         }
     }
 }
@@ -54,7 +46,7 @@ impl<T: ?Sized> OrderedMutex<T> {
     pub fn lock(&self) -> OrderedMutexGuardFuture<T> {
         OrderedMutexGuardFuture {
             mutex: &self,
-            id: self.state.fetch_add(1, Ordering::AcqRel),
+            id: self.inner.generate_id(),
             is_realized: false,
         }
     }
@@ -80,35 +72,9 @@ impl<T: ?Sized> OrderedMutex<T> {
     pub fn lock_owned(self: &Arc<Self>) -> OrderedMutexOwnedGuardFuture<T> {
         OrderedMutexOwnedGuardFuture {
             mutex: self.clone(),
-            id: self.state.fetch_add(1, Ordering::AcqRel),
+            id: self.inner.generate_id(),
             is_realized: false,
         }
-    }
-
-    #[inline]
-    fn unlock(&self) {
-        self.current.fetch_add(1, Ordering::AcqRel);
-
-        self.try_wake(null_mut())
-    }
-
-    #[inline]
-    fn store_waker(&self, waker: &Waker) {
-        self.try_wake(Box::into_raw(Box::new(waker.clone())));
-    }
-
-    #[inline]
-    fn try_wake(&self, waker_ptr: *mut Waker) {
-        let waker_ptr = self.waker.swap(waker_ptr, Ordering::AcqRel);
-
-        if !waker_ptr.is_null() {
-            unsafe { Box::from_raw(waker_ptr).wake() }
-        }
-    }
-
-    #[inline]
-    fn try_acquire(&self, id: usize) -> bool {
-        id == self.current.load(Ordering::Acquire)
     }
 }
 
@@ -147,11 +113,11 @@ impl<'a, T: ?Sized> Future for OrderedMutexGuardFuture<'a, T> {
     type Output = OrderedMutexGuard<'a, T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.try_acquire(self.id) {
+        if self.mutex.inner.try_acquire(self.id) {
             self.is_realized = true;
             Poll::Ready(OrderedMutexGuard { mutex: self.mutex })
         } else {
-            self.mutex.store_waker(cx.waker());
+            self.mutex.inner.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -161,13 +127,13 @@ impl<T: ?Sized> Future for OrderedMutexOwnedGuardFuture<T> {
     type Output = OrderedMutexOwnedGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.mutex.try_acquire(self.id) {
+        if self.mutex.inner.try_acquire(self.id) {
             self.is_realized = true;
             Poll::Ready(OrderedMutexOwnedGuard {
                 mutex: self.mutex.clone(),
             })
         } else {
-            self.mutex.store_waker(cx.waker());
+            self.mutex.inner.store_waker(cx.waker());
             Poll::Pending
         }
     }
@@ -254,8 +220,8 @@ mod tests {
     async fn test_overflow() {
         let mut c = OrderedMutex::new(String::from("lol"));
 
-        c.state = AtomicUsize::new(usize::max_value());
-        c.current = AtomicUsize::new(usize::max_value());
+        c.inner.state = AtomicUsize::new(usize::max_value());
+        c.inner.current = AtomicUsize::new(usize::max_value());
 
         let mut co: OrderedMutexGuard<String> = c.lock().await;
         co.add_assign("lol");
