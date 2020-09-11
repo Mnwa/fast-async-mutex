@@ -470,7 +470,6 @@ mod tests {
                             *lock += 1;
                             drop(lock);
                         } else {
-                            // TODO Check why double acquire of read lock is stopped the test.
                             let _lock = mutex.read().await;
                         }
                     })
