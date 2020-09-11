@@ -16,6 +16,9 @@ use std::task::{Context, Poll};
 /// But, when you have often read, writes may wait too long, while reads don't stop.
 /// The Ordered RW Lock will be locking all reads, which starting after write and unlocking them only when write will realize.
 /// It may be slow down the reads speed, but decrease time to write on systems, where it is critical.
+///
+/// **BUT RW Lock has some limitations. You should avoid acquiring the second reading before realizing first inside the one future.
+/// Because it can happen that between your readings a write from another thread will acquire the mutex, and you will get a deadlock.**
 #[derive(Debug)]
 pub struct OrderedRwLock<T: ?Sized> {
     readers: AtomicUsize,
