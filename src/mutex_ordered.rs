@@ -6,10 +6,13 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 /// An async `ordered` mutex.
-/// It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
+/// It will be work with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std`, etc..
 ///
 /// The main difference with the standard `Mutex` is ordered mutex will check an ordering of blocking.
 /// This way has some guaranties of mutex execution order, but it's a little bit slowly than original mutex.
+///
+/// The Ordered Mutex has its mechanism of locking order when you have concurrent access to data.
+/// It will work well when you needed step by step data locking like sending UDP packages in a specific order.
 #[derive(Debug)]
 pub struct OrderedMutex<T: ?Sized> {
     inner: OrderedInner<T>,

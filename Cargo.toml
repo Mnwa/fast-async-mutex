@@ -1,9 +1,9 @@
 [package]
 name = "fast-async-mutex"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["Mnwa <mihan@panfilov.biz>"]
 edition = "2018"
-description = "The fast async mutex which uses spinlock algorithm with using waker"
+description = "It is a lib which provide asynchronous locking mechanisms (Mutex, RwLock, OrderedMutex and OrderedRwLock)"
 license = "Apache-2.0/MIT"
 keywords = ["mutex", "lock", "thread", "spin", "concurrency"]
 categories = ["concurrency"]

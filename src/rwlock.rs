@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 /// An async `ordered` RwLock.
-/// It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
+/// It will be work with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std`, etc..
 #[derive(Debug)]
 pub struct RwLock<T: ?Sized> {
     readers: AtomicUsize,

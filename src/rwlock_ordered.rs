@@ -7,11 +7,15 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 /// An async `ordered` RwLock.
-/// It will be works with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std` and etc..
+/// It will be work with any async runtime in `Rust`, it may be a `tokio`, `smol`, `async-std`, etc..
 ///
-/// The main difference with the standard `RwLock` is ordered mutex will check an ordering of blocking.
-/// This way has some guaranties of mutex execution order, but it's a little bit slowly than original mutex.
-/// Also ordered mutex is an unstable on thread pool runtimes.
+/// TThe main difference with the standard `RwLock` is ordered mutex will check an ordering of blocking.
+/// This way has some guaranties of mutex execution order, but it's a little bit slower than the original mutex.
+///
+/// The RW Lock mechanism accepts you get shared access to your data without locking.
+/// But, when you have often read, writes may wait too long, while reads don't stop.
+/// The Ordered RW Lock will be locking all reads, which starting after write and unlocking them only when write will realize.
+/// It may be slow down the reads speed, but decrease time to write on systems, where it is critical.
 #[derive(Debug)]
 pub struct OrderedRwLock<T: ?Sized> {
     readers: AtomicUsize,
@@ -19,7 +23,7 @@ pub struct OrderedRwLock<T: ?Sized> {
 }
 
 impl<T> OrderedRwLock<T> {
-    /// Create a new `UnorderedRWLock`
+    /// Create a new `OrderedRWLock`
     #[inline]
     pub const fn new(data: T) -> OrderedRwLock<T> {
         OrderedRwLock {
