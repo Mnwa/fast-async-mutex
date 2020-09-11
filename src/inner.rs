@@ -31,7 +31,12 @@ impl<T: ?Sized> Inner<T> {
 
     #[inline]
     pub(crate) fn store_waker(&self, waker: &Waker) {
-        self.try_wake(Box::into_raw(Box::new(waker.clone())));
+        let _ = self.waker.compare_exchange_weak(
+            null_mut(),
+            Box::into_raw(Box::new(waker.clone())),
+            Ordering::AcqRel,
+            Ordering::Relaxed,
+        );
     }
 
     #[inline]
