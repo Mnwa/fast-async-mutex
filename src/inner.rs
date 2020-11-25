@@ -24,7 +24,7 @@ impl<T> Inner<T> {
 impl<T: ?Sized> Inner<T> {
     #[inline]
     pub(crate) fn unlock(&self) {
-        self.is_acquired.store(false, Ordering::SeqCst);
+        self.is_acquired.store(false, Ordering::Release);
 
         self.try_wake(null_mut())
     }
@@ -41,7 +41,7 @@ impl<T: ?Sized> Inner<T> {
 
     #[inline]
     pub(crate) fn try_wake(&self, waker_ptr: *mut Waker) {
-        let waker_ptr = self.waker.swap(waker_ptr, Ordering::AcqRel);
+        let waker_ptr = self.waker.swap(waker_ptr, Ordering::Relaxed);
 
         if !waker_ptr.is_null() {
             unsafe { Box::from_raw(waker_ptr).wake() }
@@ -50,7 +50,9 @@ impl<T: ?Sized> Inner<T> {
 
     #[inline]
     pub(crate) fn try_acquire(&self) -> bool {
-        !self.is_acquired.swap(true, Ordering::AcqRel)
+        self.is_acquired
+            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
     }
 }
 
