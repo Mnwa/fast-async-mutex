@@ -31,27 +31,25 @@ impl<T: ?Sized> Inner<T> {
 
     #[inline]
     pub(crate) fn store_waker(&self, waker: &Waker) {
-        let _ = self.waker.compare_exchange_weak(
-            null_mut(),
-            Box::into_raw(Box::new(waker.clone())),
-            Ordering::AcqRel,
-            Ordering::Relaxed,
-        );
+        self.try_wake(Box::into_raw(Box::from(waker.clone())))
     }
 
     #[inline]
     pub(crate) fn try_wake(&self, waker_ptr: *mut Waker) {
-        let waker_ptr = self.waker.swap(waker_ptr, Ordering::Relaxed);
+        let cur_waker_ptr = self.waker.swap(waker_ptr, Ordering::Relaxed);
 
-        if !waker_ptr.is_null() {
-            unsafe { Box::from_raw(waker_ptr).wake() }
+        if !cur_waker_ptr.is_null() {
+            let cur_waker = unsafe { Box::from_raw(cur_waker_ptr) };
+            if waker_ptr.is_null() || !cur_waker.will_wake(unsafe { &*waker_ptr }) {
+                cur_waker.wake();
+            }
         }
     }
 
     #[inline]
     pub(crate) fn try_acquire(&self) -> bool {
         self.is_acquired
-            .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .compare_exchange_weak(false, true, Ordering::AcqRel, Ordering::Relaxed)
             .is_ok()
     }
 }
@@ -79,7 +77,7 @@ impl<T> OrderedInner<T> {
 impl<T: ?Sized> OrderedInner<T> {
     #[inline]
     pub(crate) fn generate_id(&self) -> usize {
-        self.state.fetch_add(1, Ordering::Release)
+        self.state.fetch_add(1, Ordering::AcqRel)
     }
 
     #[inline]
@@ -96,10 +94,13 @@ impl<T: ?Sized> OrderedInner<T> {
 
     #[inline]
     pub(crate) fn try_wake(&self, waker_ptr: *mut Waker) {
-        let waker_ptr = self.waker.swap(waker_ptr, Ordering::AcqRel);
+        let cur_waker_ptr = self.waker.swap(waker_ptr, Ordering::Relaxed);
 
-        if !waker_ptr.is_null() {
-            unsafe { Box::from_raw(waker_ptr).wake() }
+        if !cur_waker_ptr.is_null() {
+            let cur_waker = unsafe { Box::from_raw(cur_waker_ptr) };
+            if waker_ptr.is_null() || !cur_waker.will_wake(unsafe { &*waker_ptr }) {
+                cur_waker.wake();
+            }
         }
     }
 
