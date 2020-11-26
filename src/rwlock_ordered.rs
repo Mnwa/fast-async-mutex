@@ -310,9 +310,9 @@ mod tests {
     use std::ops::AddAssign;
     use std::sync::atomic::AtomicUsize;
     use std::sync::Arc;
-    use tokio::time::{delay_for, Duration};
+    use tokio::time::{sleep, Duration};
 
-    #[tokio::test(core_threads = 12)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
     async fn test_mutex() {
         let c = OrderedRwLock::new(0);
 
@@ -327,7 +327,7 @@ mod tests {
         assert_eq!(*co, 10000)
     }
 
-    #[tokio::test(core_threads = 12)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
     async fn test_mutex_delay() {
         let expected_result = 100;
         let c = OrderedRwLock::new(0);
@@ -335,7 +335,7 @@ mod tests {
         futures::stream::iter(0..expected_result)
             .then(|i| c.write().map(move |co| (i, co)))
             .for_each_concurrent(None, |(i, mut co)| async move {
-                delay_for(Duration::from_millis(expected_result - i)).await;
+                sleep(Duration::from_millis(expected_result - i)).await;
                 *co += 1;
             })
             .await;
@@ -344,7 +344,7 @@ mod tests {
         assert_eq!(*co, expected_result)
     }
 
-    #[tokio::test(core_threads = 12)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
     async fn test_owned_mutex() {
         let c = Arc::new(OrderedRwLock::new(0));
 
@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(*co, 10000)
     }
 
-    #[tokio::test(core_threads = 12)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
     async fn test_container() {
         let c = OrderedRwLock::new(String::from("lol"));
 
@@ -369,7 +369,7 @@ mod tests {
         assert_eq!(*co, "lollol");
     }
 
-    #[tokio::test(core_threads = 12)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
     async fn test_overflow() {
         let mut c = OrderedRwLock::new(String::from("lol"));
 
@@ -382,7 +382,7 @@ mod tests {
         assert_eq!(*co, "lollol");
     }
 
-    #[tokio::test(core_threads = 12)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
     async fn test_timeout() {
         let c = OrderedRwLock::new(String::from("lol"));
 
@@ -402,7 +402,7 @@ mod tests {
         assert_eq!(*co, "lollol");
     }
 
-    #[tokio::test(core_threads = 12)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
     async fn test_concurrent_reading() {
         let c = OrderedRwLock::new(String::from("lol"));
 
@@ -423,7 +423,7 @@ mod tests {
         assert_eq!(*co, *co2);
     }
 
-    #[tokio::test(core_threads = 12)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
     async fn test_concurrent_reading_writing() {
         let c = OrderedRwLock::new(String::from("lol"));
 

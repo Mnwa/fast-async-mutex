@@ -16,5 +16,5 @@ repository = "https://github.com/Mnwa/fast-async-mutex"
 [dependencies]
 
 [dev-dependencies]
-tokio = { version = "0.2", features = ["rt-threaded", "macros", "time"] }
+tokio = { version = "0.3", features = ["full"] }
 futures = "0.3"

@@ -148,9 +148,9 @@ mod tests {
     use futures::{FutureExt, StreamExt, TryStreamExt};
     use std::ops::AddAssign;
     use std::sync::Arc;
-    use tokio::time::{delay_for, Duration};
+    use tokio::time::{sleep, Duration};
 
-    #[tokio::test(core_threads = 12)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
     async fn test_mutex() {
         let c = Mutex::new(0);
 
@@ -165,7 +165,7 @@ mod tests {
         assert_eq!(*co, 10000)
     }
 
-    #[tokio::test(core_threads = 12)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
     async fn test_mutex_delay() {
         let expected_result = 100;
         let c = Mutex::new(0);
@@ -173,7 +173,7 @@ mod tests {
         futures::stream::iter(0..expected_result)
             .then(|i| c.lock().map(move |co| (i, co)))
             .for_each_concurrent(None, |(i, mut co)| async move {
-                delay_for(Duration::from_millis(expected_result - i)).await;
+                sleep(Duration::from_millis(expected_result - i)).await;
                 *co += 1;
             })
             .await;
@@ -182,7 +182,7 @@ mod tests {
         assert_eq!(*co, expected_result)
     }
 
-    #[tokio::test(core_threads = 12)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
     async fn test_owned_mutex() {
         let c = Arc::new(Mutex::new(0));
 
