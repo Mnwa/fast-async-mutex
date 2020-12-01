@@ -43,6 +43,8 @@ impl<T: ?Sized> Inner<T> {
             if waker_ptr.is_null() || !cur_waker.will_wake(unsafe { &*waker_ptr }) {
                 cur_waker.wake();
             }
+        } else if !waker_ptr.is_null() {
+            unsafe { &*waker_ptr }.wake_by_ref();
         }
     }
 
@@ -101,6 +103,8 @@ impl<T: ?Sized> OrderedInner<T> {
             if waker_ptr.is_null() || !cur_waker.will_wake(unsafe { &*waker_ptr }) {
                 cur_waker.wake();
             }
+        } else if !waker_ptr.is_null() {
+            unsafe { &*waker_ptr }.wake_by_ref();
         }
     }
 

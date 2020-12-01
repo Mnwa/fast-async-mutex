@@ -252,4 +252,30 @@ mod tests {
             assert_eq!(num, *lock)
         })
     }
+
+    #[test]
+    fn test_b() {
+        let runtime = tokio::runtime::Builder::new_multi_thread().build().unwrap();
+        let num = 1000;
+        let mutex = Arc::new(Mutex::new(0));
+        let ths: Vec<_> = (0..num)
+            .map(|_| {
+                let mutex = mutex.clone();
+                runtime.spawn(async move {
+                    let mut lock = mutex.lock().await;
+                    *lock += 1;
+                })
+            })
+            .collect();
+
+        for thread in ths {
+            runtime.block_on(thread).unwrap();
+        }
+
+        block_on(async {
+            let lock = mutex.lock().await;
+            println!("{}", *lock);
+            assert_eq!(num, *lock)
+        })
+    }
 }
