@@ -31,7 +31,7 @@ impl<T: ?Sized> Inner<T> {
 
     #[inline]
     pub(crate) fn store_waker(&self, waker: &Waker) {
-        self.try_wake(Box::into_raw(Box::from(waker.clone())))
+        self.try_wake(Box::into_raw(Box::new(waker.clone())))
     }
 
     #[inline]
@@ -77,12 +77,12 @@ impl<T> OrderedInner<T> {
 impl<T: ?Sized> OrderedInner<T> {
     #[inline]
     pub(crate) fn generate_id(&self) -> usize {
-        self.state.fetch_add(1, Ordering::AcqRel)
+        self.state.fetch_add(1, Ordering::Relaxed)
     }
 
     #[inline]
     pub(crate) fn unlock(&self) {
-        self.current.fetch_add(1, Ordering::AcqRel);
+        self.current.fetch_add(1, Ordering::Release);
 
         self.try_wake(null_mut())
     }
