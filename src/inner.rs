@@ -1,6 +1,5 @@
 use std::cell::UnsafeCell;
-use std::ptr::null_mut;
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::Waker;
 
 #[derive(Debug)]
