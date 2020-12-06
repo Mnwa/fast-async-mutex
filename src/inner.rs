@@ -84,7 +84,7 @@ impl<T: ?Sized> OrderedInner<T> {
 
     #[inline]
     pub(crate) fn unlock(&self) {
-        self.current.fetch_add(1, Ordering::Release);
+        self.current.fetch_add(1, Ordering::AcqRel);
 
         self.try_wake(null_mut())
     }
