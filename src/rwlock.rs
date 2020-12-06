@@ -2,7 +2,6 @@ use crate::inner::Inner;
 use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
-use std::ptr::null_mut;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -133,8 +132,6 @@ impl<T: ?Sized> RwLock<T> {
     fn unlock_reader(&self) {
         if self.readers.fetch_sub(1, Ordering::Release) == 1 {
             self.inner.unlock()
-        } else {
-            self.inner.try_wake(null_mut())
         }
     }
 

@@ -137,13 +137,13 @@ impl<T: ?Sized> OrderedRwLock<T> {
 
     #[inline]
     fn unlock_reader(&self) {
-        self.readers.fetch_sub(1, Ordering::Release);
+        self.readers.fetch_sub(1, Ordering::AcqRel);
         self.inner.unlock()
     }
 
     #[inline]
     fn add_reader(&self) {
-        self.readers.fetch_add(1, Ordering::Release);
+        self.readers.fetch_add(1, Ordering::AcqRel);
     }
 
     #[inline]
