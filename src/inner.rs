@@ -36,7 +36,7 @@ impl<T: ?Sized> Inner<T> {
 
     #[inline]
     pub(crate) fn try_wake(&self, waker_ptr: *mut Waker) {
-        let cur_waker_ptr = self.waker.swap(waker_ptr, Ordering::Relaxed);
+        let cur_waker_ptr = self.waker.swap(waker_ptr, Ordering::AcqRel);
 
         if !cur_waker_ptr.is_null() {
             let cur_waker = unsafe { Box::from_raw(cur_waker_ptr) };
@@ -96,7 +96,7 @@ impl<T: ?Sized> OrderedInner<T> {
 
     #[inline]
     pub(crate) fn try_wake(&self, waker_ptr: *mut Waker) {
-        let cur_waker_ptr = self.waker.swap(waker_ptr, Ordering::Relaxed);
+        let cur_waker_ptr = self.waker.swap(waker_ptr, Ordering::AcqRel);
 
         if !cur_waker_ptr.is_null() {
             let cur_waker = unsafe { Box::from_raw(cur_waker_ptr) };
